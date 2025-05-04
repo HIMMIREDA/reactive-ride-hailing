@@ -18,7 +18,7 @@ Avant d'entamer la programmation réactive, nous allons voir comment un système
 
 Un processus correspond à l'exécution d'un programme exécutable. Il se compose de :
 <figure>
-  <img src="images/processus_threads.png" alt="Processus" title="Processus">
+  <img width="600" src="images/processus_threads.png" alt="Processus" title="Processus">
   <figcaption style="text-align: center;"><strong>Processus</strong> - source: <a href="https://www.scaler.com/topics/linux-thread/">linux-thread</a></figcaption>
 </figure>
 
@@ -40,7 +40,7 @@ Chaque thread possède :
 il existe deux types de threads:
 
 <figure>
-  <img src="images/user_vs_kernel_thread.png" alt="User vs Kernel Level Threads" title="User vs Kernel Level Threads">
+  <img width="600" src="images/user_vs_kernel_thread.png" alt="User vs Kernel Level Threads" title="User vs Kernel Level Threads">
   <figcaption style="text-align: center;"><strong>User-Level thread vs Kernel-Level thread</strong> - source: <a href="https://www.scaler.com/topics/user-level-threads-and-kernel-level-threads/">ult-and-klt</a></figcaption>
 </figure>
 
@@ -53,7 +53,7 @@ les **User-level threads (ULT)** ne sont pas exécutés directement au niveau du
 Il existe plusieurs modèles de threading pour la correspondance entre ULT et KLT:
 
 <figure>
-  <img src="images/ult_klt.png" alt="Modèles du threading" title="Modèles du threading">
+  <img width="600" src="images/ult_klt.png" alt="Modèles du threading" title="Modèles du threading">
   <figcaption style="text-align: center;"><strong>Types des Modèles du threading</strong> - source: <a href="https://www.researchgate.net/figure/Three-types-of-thread-models-Popular-operating-systems-5-22-24-adopt-the_fig1_346379550">Types of thread models</a></figcaption>
 </figure>
 
@@ -81,7 +81,7 @@ Le problème survient lorsque le traitement de la requête nécessite des opéra
 En général, ce modèle ne convient que pour les applications intensives en calcul (**CPU-intensive**) qui utilisent le thread pour effectuer des calculs tout au long du traitement de la requête, telles qu'une web app qui fait des calculs mathématiques complexes ou un système de calcul financier.
 
 <figure>
-  <img src="./images/spring_mvc.png" alt="Spring MVC" title="Spring MVC">
+  <img width="600" src="./images/spring_mvc.png" alt="Spring MVC" title="Spring MVC">
   <figcaption style="text-align: center;"><strong>Spring MVC (modèle servlet)</strong> - source: <a href="https://singhkaushal.medium.com/spring-webflux-eventloop-vs-thread-per-request-model-a42d07ee8502">Webflux vs Thread per request model</a></figcaption>
 </figure>
 
@@ -92,7 +92,7 @@ C'est le modèle utilisé par exemple dans NodeJS, Netty (le serveur embarqué p
 Spring Webflux).
 
 <figure>
-  <img src="./images/event_loop.png" alt="Event Loop - Async I/O" title="Event Loop - Async I/O">
+  <img width="600" src="./images/event_loop.png" alt="Event Loop - Async I/O" title="Event Loop - Async I/O">
   <figcaption style="text-align: center;"><strong>Modèle Event Loop</strong> - source: <a href="https://www.baeldung.com/spring-webflux-concurrency">Concurrency in Spring WebFlux</a></figcaption>
 </figure>
 
