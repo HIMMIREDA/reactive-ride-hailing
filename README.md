@@ -1,60 +1,91 @@
 # Programmation Réactive en Java & SpringBoot
-
+## Sommaire
 ## 1. Introduction
 Depuis plusieurs années, le développement web en Java repose sur les servlets, un modèle synchrone et bloquant (thread/request model).  Cependant, ce modèle devient rapidement inefficace dans les applications modernes et les architectures microservices.  Ces dernières nécessitent le traitement d'un grand nombre de requêtes simultanées en temps réel.  
 Pour pallier ces contraintes, le modèle réactif a vu le jour, qui se base sur l’asynchronicité et la non-blocage, il permet une utilisation plus efficiente des ressources système.  
 Ce POC vise à comparer le modèle traditionnel et l’approche réactive. Il propose une démo basée sur [Project Reactor](https://projectreactor.io) et [Spring WebFlux](https://docs.spring.io/spring-framework/reference/web/webflux.html), en exposant les bases de programmation réactive et la manière d’intégrer ces outils avec des bases de données réactives.
 
 ## 2. Threads & Processus
-Avant d'entamer la programmation réactive, on va voir comment un système d'exploitation gère les threads d'éxecution.
+Avant d'entamer la programmation réactive, nous allons voir comment un système d'exploitation gère les threads d'exécution.
+
 ### 2.1 Processus
-Un processus correspond à l'exécution d'un exécutable. Il se compose de :
+Un processus correspond à l'exécution d'un programme exécutable. Il se compose de :
 <figure>
   <img src="images/processus_threads.png" alt="A beautiful sunset" title="Sunset over the ocean">
   <figcaption>Source: <a href="https://www.scaler.com/topics/linux-thread/">Scaler - Topics</a></figcaption>
 </figure>
 
-- **Code (Text)**: contient les instructions du programme à exécuter (read-only).
+- **Code (Text)**: contient les instructions du programme à exécuter (en mode read-only).
 - **Data**: contient les variables globales et statiques initialisées.
 - **Heap**: zone mémoire partagée entre les threads pour stocker les objets dynamiques.
-- **Files**: descripteurs de fichiers ouverts par le processus (fichiers, sockets réseau, ...).
+- **Files**: descripteurs de fichiers ouverts par le processus (fichiers, sockets réseau, …).
 - **Threads**: unités d'exécution concurrentes au sein du processus, partageant le même espace d'adressage.
 
-Chaque thread possède:
-
-- **Program Counter (PC)**: pointeur vers la prochaine instruction à exécuter
-- **Registers**: Registres du processeur contenant les données en cours de traitement.
-- **Stack**: Zone mémoire privée contenant les variables locales et paramètres des fonctions.
 ### 2.2 Threads
-il y a 2 types de threads:
-- User-level threads: ce sont des threads crées et gérés par des des programmes, librairies par exemple: les threads crées par JVM, les threads crées par le module threading du Python.
-- Kernel-level threads: ce sont des threads 
-## 3. Modèle traditionnel (servlet)
-### 3.1 modèle traditionnel
+Chaque Processus est constitué d'au moins un thread d'exécution, un thread représente une sous-tâche
+Chaque thread possède :
 
-### 3.2 Modèle réactif
+- **Program Counter (PC)**: pointeur vers la prochaine instruction à exécuter.
+- **Registers**: registres du processeur contenant les données en cours de traitement.
+- **Stack**: zone mémoire privée contenant les variables locales et les paramètres des fonctions.
 
-## 4. Reactive Manifesto
+il existe deux types de threads:
 
-## 5. L'initiative Reactive streams
+- **User-level threads (ULT)**: ce sont des threads créés et gérés par des programmes ou des bibliothèques, par exemple: les threads Java, les threads créés par le module threading de Python, POSIX threads (pthreads) en C/C++.
+- **Kernel-level threads (KLT)**:  ce sont des threads créés et gérés au niveau du noyau du système d'exploitation. Ce sont les tâches qui sont planifiées pour l'exécution sur le CPU.
+#### 2.2.1 Threading Model
+les **User-level threads (ULT)** ne sont pas exécutés directement au niveau du processeur, mais ils sont liés à des **kernel-level threads (KLT)** exécutables.
+Il existe plusieurs modèles de threading pour la correspondance entre ULT et KLT:
 
-## 6. Programmation reactive en java
-### 6.1 Reactor, RxJava, Mutiny, vertx
-### 6.2 Définitions (Back pressure, ...)
-## 4. Reactor
-### 4.1 Reactor core
+<figure>
+  <img src="images/ult_klt.png" alt="Modèles threading" title="Modèles threading">
+  <figcaption>Source: <a href="https://www.researchgate.net/figure/Three-types-of-thread-models-Popular-operating-systems-5-22-24-adopt-the_fig1_346379550">researchgate</a></figcaption>
+</figure>
 
-### 4.2 Reactor netty
+- **Modèle 1:1**: Chaque **thread utilisateur ULT** est associé à **un thread noyau dédié KLT**.
+- **Modèle M:N**: **M threads utilisateur ULT** sont associés à **N threads noyau KLT**.
+- **Modèle M:1**: **Tous les threads utilisateur d'un processus ULT** partagent **un seul thread noyau KLT**.
 
-### 4.3 Reactor kafka
+**Java** utilise le modèle 1:1, où chaque thread Java (ULT) est lié à un KLT. En général les KLT coûteux à créer et à planifier au niveau du CPU. Par exemple, si un thread Java effectue un appel à une base de données (opération I/O (entrée/sortie)), son KLT associé reste bloqué en attendant la réponse. Pendant cette période, le thread Java reste inactif, ce qui n'est pas optimal en termes d'utilisation des ressources.
+C'est ce problème que la programmation réactive cherche à résoudre, en proposant un modèle non-bloquant pour gérer efficacement les opérations I/O.
 
+## 3. Modèle traditionnel vs Modèle réactif
+### 3.1 Architecture et limites du modèle traditionnel (servlet)
 
-## 5. Spring Webflux
+### 3.2 Principes du modèle réactif
 
-## 6. R2DBC
+## 4. Fondamentaux de la programmation réactive
+### 4.1 Reactive Manifesto
+### 4.2 L'initiative Reactive Streams
+### 4.3 Concepts clés (Back pressure, Event-loop, Non-blocking I/O)
 
-## 7. Spring Webflux vs Spring MVC 
+## 5. Implémentations Java de la programmation réactive
+### 5.1 Panorama (Reactor, RxJava, Mutiny, Vert.x)
+### 5.2 Project Reactor en détail
+#### 5.2.1 Reactor Core (Flux et Mono)
+#### 5.2.2 Opérateurs essentiels
+#### 5.2.3 Reactor Netty
+#### 5.2.4 Reactor Kafka
 
-## 8. POC (maybe an api using spring webflux + postgres or redis + kafka ??? + htmx ???)
+## 6. Spring WebFlux
+### 6.1 Architecture et principes
+### 6.2 API fonctionnelle vs Annotations
 
-##  9. Bonus: comment la programmation réactive est implémentée (epoll/kqueue syscalls)
+## 7. Persistance réactive avec R2DBC
+### 7.1 Principes de R2DBC
+### 7.2 Intégration avec Spring Data
+
+## 8. Spring WebFlux vs Spring MVC
+### 8.1 Comparaison des performances
+### 8.2 Cas d'usage appropriés
+
+## 9. POC pratique
+### 9.1 Architecture de l'application
+### 9.2 API réactive avec Spring WebFlux
+### 9.3 Persistance avec R2DBC PostgreSQL
+### 9.4 Intégration Kafka
+### 9.5 Interface utilisateur avec HTMX
+
+## 10. Bonus: Implémentation sous le capot
+### 10.1 Les syscalls epoll/kqueue et la programmation événementielle
+### 10.2 Modèles de concurrence: Thread pools vs Event loops
