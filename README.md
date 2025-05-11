@@ -101,8 +101,28 @@ Spring Webflux).
 ## 4. Fondamentaux de la programmation réactive
 
 ### 4.1 Reactive Manifesto
+(Le manifeste Réactif)[ https://www.reactivemanifesto.org/fr ]  définit un système réactif comme étant un système distribué possédant quatre caractéristiques :
+<figure>
+  <img width="600" src="./images/reactive_system.png" alt="Système Réactif" title="Système Réactif">
+  <figcaption style="text-align: center;"><strong>Caractéristiques d'un système réactif</strong> - source: <a href="https://www.reactivemanifesto.org/fr">Reactive Manifesto</a></figcaption>
+</figure>
 
-### 4.2 L'initiative Reactive Streams
+1. **Responsive**: il répond rapidement en toutes circonstances, si cela est possible.
+2. **Elastic**: il reste disponible quelle que soit la charge de travail.
+3. **Resilient**: il reste disponible en cas d'erreur.
+4. **Message driven**: utilise le passage de messages
+   asynchrones entre ses composants afin de garantir leur couplage
+   faible, leur isolation, la transparence de localisation ainsi que la
+   délégation d’erreurs à d’autres composants
+
+### 4.2 L'initiative Reactive Streams vs. JDK9
+
+(Reactive Streams)[ https://www.reactive-streams.org/ ] est une spécification pour le traitement asynchrone des flux de données, principalement destinée à l'écosystème Java. Elle a été adoptée par plusieurs bibliothèques de programmation réactive telles que RxJava 2 et Reactor. Avec l’arrivée de Java 9, les interfaces de cette spécification (`Publisher`, `Subscriber`, `Subscription`, `Processor`) ont été intégrées directement dans le JDK via le package `java.util.concurrent.Flow`, tout en conservant la même sémantique.
+
+Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive Streams` pour garantir une compatibilité avec Java 8.
+
+
+[//]: # (Dans cette section, nous allons donc utiliser les interfaces de `java.util.concurrent.Flow`, étant donné leur similarité puisqu'elles sont similaires à celles de `Reactive Streams`.)
 
 ### 4.3 Concepts clés (Back pressure, Event-loop, Non-blocking I/O)
 
@@ -157,4 +177,4 @@ Spring Webflux).
 ### 10.2 Modèles de concurrence: Thread pools vs Event loops
 
 ## 11. Project Loom & virtual threads
-## 11. Références
+## 12. Références

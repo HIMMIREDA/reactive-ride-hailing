@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:latest
+    restart: always
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: artois
+      POSTGRES_PASSWORD: artois123
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+volumes:
+  db_data:
