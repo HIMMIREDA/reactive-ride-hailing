@@ -16,7 +16,6 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <modules>
-        <module>reactor-poc</module>
         <module>spring-webflux-poc</module>
     </modules>
 
