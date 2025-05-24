@@ -8,10 +8,12 @@
         <option value="$PROJECT_DIR$/spring-webflux-poc/users-service/pom.xml" />
         <option value="$PROJECT_DIR$/user-service/pom.xml" />
         <option value="$PROJECT_DIR$/spring-webflux-poc/user-service/pom.xml" />
+        <option value="$PROJECT_DIR$/spring-webflux-poc/auth-service/pom.xml" />
       </list>
     </option>
     <option name="ignoredFiles">
       <set>
+        <option value="$PROJECT_DIR$/reactor-poc/pom.xml" />
         <option value="$PROJECT_DIR$/user-service/pom.xml" />
       </set>
     </option>

@@ -61,7 +61,7 @@ Il existe plusieurs modèles de threading pour la correspondance entre ULT et KL
 - **Modèle M:N**: **M threads utilisateur ULT** sont associés à **N threads noyau KLT**.
 - **Modèle M:1**: **Tous les threads utilisateur d'un processus ULT** partagent **un seul thread noyau KLT**.
 
-**Java** utilise le modèle 1:1, où chaque thread Java (ULT) est lié à un KLT. En général les KLT coûteux à créer et à planifier au niveau du CPU. Par exemple, si un thread Java effectue un appel à une base de données (opération I/O (entrée/sortie)), son KLT associé reste bloqué en attendant la réponse. Pendant cette période, le thread Java reste inactif, ce qui n'est pas optimal en termes d'utilisation des ressources.
+**Java** utilise le modèle 1:1, où chaque thread Java (ULT) est lié à un KLT. En général les KLT sont coûteux à créer et à planifier au niveau du CPU. Par exemple, si un thread Java effectue un appel à une base de données (opération I/O (entrée/sortie)), son KLT associé reste bloqué en attendant la réponse. Pendant cette période, le thread Java reste inactif, ce qui n'est pas optimal en termes d'utilisation des ressources.
 C'est ce problème que **la programmation réactive** cherche à résoudre, en proposant un modèle non-bloquant pour gérer efficacement les opérations I/O.
 
 ## 3. Modèle traditionnel vs Modèle réactif
@@ -117,7 +117,7 @@ Spring Webflux).
 
 ### 4.2 L'initiative Reactive Streams vs. JDK9
 
-(Reactive Streams)[ https://www.reactive-streams.org/ ] est une spécification pour le traitement asynchrone des flux de données, principalement destinée à l'écosystème Java. Elle a été adoptée par plusieurs bibliothèques de programmation réactive telles que RxJava 2 et Reactor. Avec l’arrivée de Java 9, les interfaces de cette spécification (`Publisher`, `Subscriber`, `Subscription`, `Processor`) ont été intégrées directement dans le JDK via le package `java.util.concurrent.Flow`, tout en conservant la même sémantique.
+[Reactive Streams](https://www.reactive-streams.org/) est une spécification pour le traitement asynchrone des flux de données, principalement destinée à l'écosystème Java. Elle a été adoptée par plusieurs bibliothèques de programmation réactive telles que RxJava 2 et Reactor. Avec l’arrivée de Java 9, les interfaces de cette spécification (`Publisher`, `Subscriber`, `Subscription`, `Processor`) ont été intégrées directement dans le JDK via le package `java.util.concurrent.Flow`, tout en conservant la même sémantique.
 
 Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive Streams` pour garantir une compatibilité avec Java 8.
 
@@ -127,14 +127,13 @@ Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive 
 ### 4.3 Concepts clés (Back pressure, Event-loop, Non-blocking I/O)
 
 ## 5. Implémentations Java de la programmation réactive
-
-### 5.1 Panorama (Reactor, RxJava, Mutiny, Vert.x)
-
+Reactor, Mutiny, RxJava
 ### 5.2 Project Reactor en détail
 
 #### 5.2.1 Reactor Core (Flux et Mono)
-
+Flux vs Mono vs Publisher
 #### 5.2.2 Opérateurs essentiels
+#### Schedulers.bounedElastic & parallel, subscribeOn , publishOn
 
 #### 5.2.3 Reactor Netty
 
@@ -144,7 +143,6 @@ Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive 
 
 ### 6.1 Architecture et principes
 
-### 6.2 API fonctionnelle vs Annotations
 
 ## 7. Persistance réactive avec R2DBC
 
@@ -162,13 +160,9 @@ Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive 
 
 ### 8.4 Intégration Kafka
 
-### 8.5 Interface utilisateur avec HTMX
-
 ## 9. Spring WebFlux vs Spring MVC
 
 ### 9.1 Comparaison des performances
-
-### 9.2 Cas d'usage appropriés
 
 ## 10. Bonus: Implémentation sous le capot
 
