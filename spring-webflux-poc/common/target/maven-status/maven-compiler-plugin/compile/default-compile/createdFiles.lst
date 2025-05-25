@@ -1,0 +1,8 @@
+fr/univ/artois/reda/Main.class
+fr/univ/artois/reda/avro/RideBookedEvent$Builder.class
+fr/univ/artois/reda/avro/RideBookedEvent.class
+fr/univ/artois/reda/avro/RideToAcceptEvent$Builder.class
+fr/univ/artois/reda/avro/RideRequestedEvent.class
+fr/univ/artois/reda/avro/RideStatus.class
+fr/univ/artois/reda/avro/RideRequestedEvent$Builder.class
+fr/univ/artois/reda/avro/RideToAcceptEvent.class

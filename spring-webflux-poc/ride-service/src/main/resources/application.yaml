@@ -1,0 +1,20 @@
+server:
+  port: 8083
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    properties:
+        schema.registry.url: http://localhost:8081
+        auto.register.schemas: false
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:15432/rides
+    username: artois
+    password: artois123
+  flyway:
+    url: jdbc:postgresql://localhost:15432/rides
+    locations: classpath:db/migration
+
+kafka:
+  topics:
+    ride-requested: "poc-ride-requested-v1"
