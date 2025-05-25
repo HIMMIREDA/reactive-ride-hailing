@@ -1,7 +1,10 @@
-package fr.univ.artois.reda.userservice.enums;
-
+package fr.univ.artois.reda.rideservice.enums;
 
 public enum RideStatus {
-    REQUESTED, ACCEPTED, CANCELED;
+    REQUESTED,
+    TO_ACCEPT,
+    BOOKED,
+    ONGOING,
+    FINISHED,
+    CANCELED;
 }
-

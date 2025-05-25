@@ -1,2 +1,3 @@
 CREATE DATABASE users;
-CREATE DATABASE ride_requests;
+CREATE DATABASE rides;
+CREATE DATABASE drives;

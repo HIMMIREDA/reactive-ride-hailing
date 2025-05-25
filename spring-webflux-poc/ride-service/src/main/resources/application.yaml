@@ -18,3 +18,5 @@ spring:
 kafka:
   topics:
     ride-requested: "poc-ride-requested-v1"
+    ride-to-accept: "poc-ride-to-accept-v1"
+    ride-booked: "poc-ride-booked-v1"

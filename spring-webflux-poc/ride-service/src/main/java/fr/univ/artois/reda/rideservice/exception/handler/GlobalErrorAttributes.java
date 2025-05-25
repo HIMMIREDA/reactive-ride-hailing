@@ -1,4 +1,4 @@
-package fr.univ.artois.reda.userservice.exception.handler;
+package fr.univ.artois.reda.rideservice.exception.handler;
 
 import org.springframework.boot.web.error.ErrorAttributeOptions;
 import org.springframework.boot.web.reactive.error.DefaultErrorAttributes;

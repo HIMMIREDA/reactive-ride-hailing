@@ -1,4 +1,4 @@
-package fr.univ.artois.reda.userservice.entity;
+package fr.univ.artois.reda.rideservice.entity;
 
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;

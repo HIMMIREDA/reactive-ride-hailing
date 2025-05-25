@@ -11,13 +11,25 @@
     <packaging>pom</packaging>
     <name>spring-webflux-poc</name>
     <description>Spring Webflux POC</description>
-
+    <repositories>
+        <repository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+        </repository>
+    </repositories>
     <modules>
         <module>auth-service</module>
-        <module>user-service</module>
+        <module>ride-service</module>
+        <module>driver-service</module>
+        <module>common</module>
     </modules>
     <artifactId>spring-webflux-poc</artifactId>
     <dependencies>
+        <dependency>
+            <groupId>io.projectreactor.tools</groupId>
+            <artifactId>blockhound</artifactId>
+            <version>1.0.10.RELEASE</version>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -28,7 +40,11 @@
             <artifactId>mapstruct</artifactId>
             <version>1.6.3</version>
         </dependency>
-
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-avro-serializer</artifactId>
+            <version>7.7.1</version>
+        </dependency>
     </dependencies>
 
     <build>

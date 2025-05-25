@@ -1,4 +1,4 @@
-package fr.univ.artois.reda.userservice.dto.request;
+package fr.univ.artois.reda.rideservice.dto.request;
 
 import lombok.*;
 

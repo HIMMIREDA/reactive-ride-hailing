@@ -4,9 +4,11 @@
     <file url="file://$PROJECT_DIR$/reactor-poc/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/reactor-poc/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/spring-webflux-poc/auth-service/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/spring-webflux-poc/common/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/spring-webflux-poc/driver-service/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/spring-webflux-poc/ride-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/spring-webflux-poc/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/spring-webflux-poc/src/main/resources" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/spring-webflux-poc/user-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/user-service/src/main/java" charset="UTF-8" />

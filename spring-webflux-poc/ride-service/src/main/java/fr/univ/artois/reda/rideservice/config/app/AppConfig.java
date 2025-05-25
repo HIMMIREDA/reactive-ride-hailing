@@ -1,4 +1,4 @@
-package fr.univ.artois.reda.userservice.config.app;
+package fr.univ.artois.reda.rideservice.config.app;
 
 import org.springframework.boot.autoconfigure.web.WebProperties;
 import org.springframework.context.annotation.Bean;

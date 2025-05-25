@@ -4,6 +4,7 @@ import fr.univ.artois.reda.authservice.dto.request.AuthRequestDto;
 import fr.univ.artois.reda.authservice.dto.request.UserRegisterRequestDto;
 import fr.univ.artois.reda.authservice.dto.response.AuthResponseDto;
 import fr.univ.artois.reda.authservice.dto.response.UserRegisterResponseDto;
+import fr.univ.artois.reda.authservice.entity.UserEntity;
 import fr.univ.artois.reda.authservice.exception.UserExistsException;
 import fr.univ.artois.reda.authservice.exception.UserNotFoundException;
 import fr.univ.artois.reda.authservice.mapper.UserMapper;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Service
 @RequiredArgsConstructor
@@ -31,16 +33,19 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public Mono<UserRegisterResponseDto> createUser(UserRegisterRequestDto userRegisterRequestDto) {
         return userRepository.existsByEmailAndRole(userRegisterRequestDto.getEmail(), userRegisterRequestDto.getRole())
-                .<Boolean>handle((exists, sink) -> {
+                .flatMap(exists -> {
                     if (exists) {
-                        sink.error(new UserExistsException("The user with the email " + userRegisterRequestDto.getEmail() + " already exists"));
-                    } else {
-                        userRegisterRequestDto.setPassword(bCryptPasswordEncoder.encode(userRegisterRequestDto.getPassword()));
-                        sink.next(true);
+                        return Mono.error(new UserExistsException("The user with the email " + userRegisterRequestDto.getEmail() + " already exists"));
                     }
+                    return Mono.fromCallable(() -> bCryptPasswordEncoder.encode(userRegisterRequestDto.getPassword()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .map(encodedPassword -> {
+                                userRegisterRequestDto.setPassword(encodedPassword);
+                                return userMapper.mapToUserEntity(userRegisterRequestDto);
+                            })
+                            .flatMap(userRepository::save)
+                            .map(userMapper::mapToUserRegisterResponseDto);
                 })
-                .flatMap(exists -> userRepository.save(userMapper.mapToUserEntity(userRegisterRequestDto)))
-                .map(userMapper::mapToUserRegisterResponseDto)
                 .log();
     }
 
@@ -49,16 +54,16 @@ public class AuthServiceImpl implements AuthService {
     public Mono<AuthResponseDto> auth(AuthRequestDto authRequestDto) {
         return userRepository.findByEmailAndRole(authRequestDto.getEmail(), authRequestDto.getRole())
                 .switchIfEmpty(Mono.error(new UserNotFoundException(String.format("User with email: %s not found", authRequestDto.getEmail()))))
-                .<AuthResponseDto>handle((userEntity, sink) -> {
+                .<UserEntity>handle((userEntity, sink) -> {
                     if (bCryptPasswordEncoder.matches(authRequestDto.getPassword(), userEntity.getPassword())) {
-                        sink.next(userMapper.mapToAuthResponseDto(userEntity));
+                        sink.next(userEntity);
                         return;
                     }
                     sink.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
                 })
-                .flatMap(authResponseDto -> Mono.zip(Mono.just(authResponseDto), jwtUtil.generateToken(authResponseDto.getEmail(), authResponseDto.getId().toString(), authResponseDto.getRole())))
+                .flatMap(userEntity -> Mono.zip(Mono.just(userEntity), jwtUtil.generateToken(userEntity)))
                 .map((tuple2) -> {
-                    final AuthResponseDto authResponseDto = tuple2.getT1();
+                    final AuthResponseDto authResponseDto = userMapper.mapToAuthResponseDto(tuple2.getT1());
                     final String token = tuple2.getT2();
                     authResponseDto.setToken(token);
                     return authResponseDto;

@@ -9,6 +9,7 @@ public record UserRegisterResponseDto(
         String email,
         String firstName,
         String lastName,
+        String phoneNumber,
         Role role
 ) {
 }

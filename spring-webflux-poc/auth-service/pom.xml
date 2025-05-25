@@ -14,9 +14,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.projectreactor.tools</groupId>
-            <artifactId>blockhound</artifactId>
-            <version>1.0.10.RELEASE</version>
+            <groupId>fr.univ.artois.reda</groupId>
+            <artifactId>common</artifactId>
+            <version>${version}</version>
         </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>

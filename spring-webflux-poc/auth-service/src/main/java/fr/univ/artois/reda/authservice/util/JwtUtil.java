@@ -1,5 +1,6 @@
 package fr.univ.artois.reda.authservice.util;
 
+import fr.univ.artois.reda.authservice.entity.UserEntity;
 import fr.univ.artois.reda.authservice.enums.Role;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -27,11 +28,14 @@ public class JwtUtil {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public Mono<String> generateToken(String username, String userId, Role role) {
+    public Mono<String> generateToken(UserEntity user) {
         return Mono.fromCallable(() -> Jwts.builder()
-                        .setSubject(userId)
-                        .claim("role", role.toString())
-                        .claim("username", username)
+                        .setSubject(user.getId().toString())
+                        .claim("role", user.getRole().toString())
+                        .claim("email", user.getEmail())
+                        .claim("firstName", user.getFirstName())
+                        .claim("lastName", user.getLastName())
+                        .claim("phoneNumber", user.getPhoneNumber())
                         .setIssuedAt(new Date())
                         .signWith(secretKey)
                         .setExpiration(new Date(System.currentTimeMillis() + 86_400_000L)) // 1 day

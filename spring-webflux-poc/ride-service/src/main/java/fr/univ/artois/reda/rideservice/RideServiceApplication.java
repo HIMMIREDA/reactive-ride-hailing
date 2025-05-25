@@ -1,4 +1,4 @@
-package fr.univ.artois.reda.userservice;
+package fr.univ.artois.reda.rideservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -9,7 +9,9 @@ import reactor.blockhound.BlockHound;
 @EnableR2dbcAuditing
 public class RideServiceApplication {
     public static void main(String[] args) {
-        BlockHound.install();
+        BlockHound.builder()
+                .allowBlockingCallsInside("sun.security.ssl.SSLContextImpl", "engineInit")
+                .install();
         SpringApplication.run(RideServiceApplication.class, args);
     }
 }

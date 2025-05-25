@@ -1,5 +1,6 @@
-package fr.univ.artois.reda.userservice.dto.response;
+package fr.univ.artois.reda.rideservice.dto.response;
 
+import fr.univ.artois.reda.rideservice.enums.RideStatus;
 import lombok.*;
 
 import java.util.UUID;
@@ -16,5 +17,5 @@ public class CreateRideResponseDto {
     private  double startLng;
     private double endLat;
     private  double endLng;
-    private String status;
+    private RideStatus status;
 }

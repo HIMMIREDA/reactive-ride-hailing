@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2025-05-21T23:39:58+0200",
-    comments = "version: 1.6.3, compiler: javac, environment: Java 21.0.2 (Amazon.com Inc.)"
+    date = "2025-05-25T10:41:39+0100",
+    comments = "version: 1.6.3, compiler: javac, environment: Java 21.0.5 (Amazon.com Inc.)"
 )
 @Component
 public class UserMapperImpl implements UserMapper {
@@ -27,15 +27,17 @@ public class UserMapperImpl implements UserMapper {
         String email = null;
         String firstName = null;
         String lastName = null;
+        String phoneNumber = null;
         Role role = null;
 
         id = userEntity.getId();
         email = userEntity.getEmail();
         firstName = userEntity.getFirstName();
         lastName = userEntity.getLastName();
+        phoneNumber = userEntity.getPhoneNumber();
         role = userEntity.getRole();
 
-        UserRegisterResponseDto userRegisterResponseDto = new UserRegisterResponseDto( id, email, firstName, lastName, role );
+        UserRegisterResponseDto userRegisterResponseDto = new UserRegisterResponseDto( id, email, firstName, lastName, phoneNumber, role );
 
         return userRegisterResponseDto;
     }
@@ -52,6 +54,7 @@ public class UserMapperImpl implements UserMapper {
         userEntity.lastName( userRegisterRequestDto.getLastName() );
         userEntity.email( userRegisterRequestDto.getEmail() );
         userEntity.password( userRegisterRequestDto.getPassword() );
+        userEntity.phoneNumber( userRegisterRequestDto.getPhoneNumber() );
         userEntity.role( userRegisterRequestDto.getRole() );
 
         return userEntity.build();
@@ -69,6 +72,7 @@ public class UserMapperImpl implements UserMapper {
         authResponseDto.email( userEntity.getEmail() );
         authResponseDto.firstName( userEntity.getFirstName() );
         authResponseDto.lastName( userEntity.getLastName() );
+        authResponseDto.phoneNumber( userEntity.getPhoneNumber() );
         authResponseDto.role( userEntity.getRole() );
 
         return authResponseDto.build();

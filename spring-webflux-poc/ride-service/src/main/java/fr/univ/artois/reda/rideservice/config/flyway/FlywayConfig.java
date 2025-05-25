@@ -1,4 +1,4 @@
-package fr.univ.artois.reda.userservice.config.flyway;
+package fr.univ.artois.reda.rideservice.config.flyway;
 
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.autoconfigure.flyway.FlywayProperties;

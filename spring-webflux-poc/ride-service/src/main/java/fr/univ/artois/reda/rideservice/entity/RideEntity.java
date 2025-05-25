@@ -1,6 +1,6 @@
-    package fr.univ.artois.reda.userservice.entity;
+    package fr.univ.artois.reda.rideservice.entity;
 
-    import fr.univ.artois.reda.userservice.enums.RideStatus;
+    import fr.univ.artois.reda.rideservice.enums.RideStatus;
     import lombok.*;
     import org.springframework.data.annotation.CreatedDate;
     import org.springframework.data.annotation.Id;
@@ -33,7 +33,7 @@
 
         private  double endLng;
 
-        private RideStatus rideStatus;
+        private RideStatus status;
 
         private UUID acceptedProposalId;
 
