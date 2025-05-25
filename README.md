@@ -164,11 +164,4 @@ Flux vs Mono vs Publisher
 
 ### 9.1 Comparaison des performances
 
-## 10. Bonus: Implémentation sous le capot
-
-### 10.1 Les syscalls epoll/kqueue et la programmation événementielle
-
-### 10.2 Modèles de concurrence: Thread pools vs Event loops
-
-## 11. Project Loom & virtual threads
 ## 12. Références
