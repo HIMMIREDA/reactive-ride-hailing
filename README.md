@@ -119,21 +119,80 @@ Spring Webflux).
 
 [Reactive Streams](https://www.reactive-streams.org/) est une spécification pour le traitement asynchrone des flux de données, principalement destinée à l'écosystème Java. Elle a été adoptée par plusieurs bibliothèques de programmation réactive telles que RxJava 2 et Reactor. Avec l’arrivée de Java 9, les interfaces de cette spécification (`Publisher`, `Subscriber`, `Subscription`, `Processor`) ont été intégrées directement dans le JDK via le package `java.util.concurrent.Flow`, tout en conservant la même sémantique.
 
-Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive Streams` pour garantir une compatibilité avec Java 8.
+**Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive Streams` pour garantir une compatibilité avec Java 8.**
 
+**Interfaces de base de Reactive Streams :**
 
-[//]: # (Dans cette section, nous allons donc utiliser les interfaces de `java.util.concurrent.Flow`, étant donné leur similarité puisqu'elles sont similaires à celles de `Reactive Streams`.)
+* **`Publisher<T>` :** représente une source de flux de données asynchrones. Son rôle est de produire des éléments et de les envoyer à un ou plusieurs `Subscriber`. Elle ne possède qu'une seule méthode :
+   ```java
+   public interface Publisher<T> {     
+       public void subscribe(Subscriber<? super T> s);
+   }
+   ```
+Cette méthode est appelée par un `Subscriber` pour commencer à recevoir les éléments.
+
+* **`Subscriber<T>` :** représente un consommateur de données émises par un `Publisher`. Il définit les méthodes de callback pour réagir aux événements du flux :
+   ```java
+   public interface Subscriber<T> {     
+       public void onSubscribe(Subscription s);
+       public void onNext(T item);
+       public void onError(Throwable t);
+       public void onComplete();
+   }
+   ```
+   * `onSubscribe(Subscription s)` : appelée lors de la souscription, fournissant un objet de type `Subscription` pour contrôler le flux.
+   * `onNext(T item)` : appelée pour chaque élément émis par le `Publisher`.
+   * `onError(Throwable t)` : appelée si le `Publisher` termine avec une erreur.
+   * `onComplete()` : appelée si le `Publisher` termine avec succès.
+
+* **`Subscription` :** représente la relation entre un `Subscriber` et un `Publisher`. C'est un contrat qui permet au `Subscriber` de contrôler le flux de données qu'il reçoit. Elle définit deux méthodes principales pour la gestion du back pressure :
+   ```java
+   public interface Subscription {
+     public void request(long n);
+     public void cancel();
+   }
+   ```
+   * `request(long n)` : permet au `Subscriber` de demander au `Publisher` d'émettre au plus `n` éléments supplémentaires. C'est le mécanisme clé pour implémenter le back pressure.
+   * `cancel()` : Permet au `Subscriber` d'annuler sa souscription, signifiant qu'il ne souhaite plus recevoir d'éléments.
 
 ### 4.3 Concepts clés (Back pressure, Event-loop, Non-blocking I/O)
+#### 4.3.1 Back pressure
+<figure>
+  <img width="600" src="images/backpressure_1.png" alt="Illustration de la contre-pression 1" title="Contre-pression">
+  <img width="600" src="images/backpressure_2.png" alt="Illustration de la contre-pression 2" title="Contre-pression">
+  <figcaption style="text-align: center;"><strong>Origines de Back pressure</strong> - source: <a href="https://impurepics.com/posts/2018-05-26-backpressure-origins.html" target="_blank" rel="noopener noreferrer">Back Pressure</a></figcaption>
+</figure>
+
+Le **back pressure** est un mécanisme crucial dans la programmation réactive qui permet au consommateur de données de signaler au producteur qu'il est submergé et qu'il ne peut pas traiter les données au rythme où elles sont émises. Sans back pressure, un consommateur lent pourrait être dépassé par un producteur rapide, entraînant des problèmes comme une utilisation excessive de la mémoire ou la perte de données.
+
+#### 4.3.2 Event-loop
+L'**Event-loop** est un modèle de programmation asynchrone non bloquant où un seul thread exécute une boucle pour traiter les événements. Au lieu d'attendre la fin des opérations d'E/S, le thread principal lance l'opération et continue. Lorsqu'un résultat est disponible, un événement est déclenché, et le thread principal exécute le gestionnaire (callback) associé. Ceci permet une haute réactivité en évitant le blocage du thread principal.
+
+#### 4.3.3 Non-blocking IO
+Les **opérations d'E/S non bloquantes** (**Non-Blocking IO**) permettent à un thread d'initier une opération d'entrée ou de sortie sans attendre sa complétion. Le thread peut ensuite poursuivre d'autres tâches. Une notification est reçue lorsque l'opération est terminée. Contrairement aux E/S bloquantes, cela permet à un nombre limité de threads de gérer de nombreuses opérations concurrentes, améliorant ainsi la performance et la réactivité des applications.
+
 
 ## 5. Implémentations Java de la programmation réactive
-Reactor, Mutiny, RxJava
-### 5.2 Project Reactor en détail
+Plusieurs librairies Java facilitent l'adoption du paradigme de la programmation réactive. Parmi les plus notables, on trouve :
 
-#### 5.2.1 Reactor Core (Flux et Mono)
-Flux vs Mono vs Publisher
+* **[Project Reactor](https://projectreactor.io/) :** Développé par Pivotal (maintenant VMware), Reactor est une implémentation de la spécification **Reactive Streams**. Il fournit les types fondamentaux **Flux** (pour les séquences de 0 à N éléments) et **Mono** (pour les séquences de 0 ou 1 élément), et met l'accent sur le back pressure et un riche ensemble d'opérateurs pour la manipulation asynchrone de flux de données non bloquants. Reactor est notamment la base réactive de Spring WebFlux. C'est notre sujet de POC avec **Spring WebFlux**.
+
+* **[RxJava](https://github.com/ReactiveX/RxJava) :** Librairie mature suivant le modèle **[ReactiveX](https://reactivex.io/)**, RxJava introduit les **Observable** pour représenter des flux de données asynchrones.
+
+* **[Mutiny](https://smallrye.io/smallrye-mutiny/2.4.0/) :** Développé par Red Hat, Mutiny offre une API réactive plus impérative pour Java et Kotlin, avec les types **Multi** et **Uni** pour les flux et les résultats uniques.
+
+### 5.2 Project Reactor en détail
+#### 5.2.1 Reactor Core (Flux vs Mono vs Publisher)
+Au coeur de **Project Reactor** et de la spécification **Reactive Streams** se trouve l'interface `Publisher<T>` . Elle est définie par une unique méthode :
+```java
+public interface Publisher<T> {
+public void subscribe(Subscriber<? super T> s);
+}
+``` 
+
 #### 5.2.2 Opérateurs essentiels
-#### Schedulers.bounedElastic & parallel, subscribeOn , publishOn
+
+#### 5.3.3 Schedulers.boundedElastic & parallel, subscribeOn , publishOn
 
 #### 5.2.3 Reactor Netty
 
