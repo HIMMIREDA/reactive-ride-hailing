@@ -9,5 +9,5 @@ import java.util.UUID;
 @Getter @Setter
 @Builder
 public class AcceptRideProposalRequestDto {
-    private UUID proposalId;
+    private UUID rideProposalId;
 }

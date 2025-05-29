@@ -12,11 +12,10 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27017/drives?replicaSet=rs0
-
       auto-index-creation: true
 kafka:
   topics:
-    ride-requested: "poc-ride-requested-v1"
-    ride-to-accept: "poc-ride-to-accept-v1"
-    ride-booked: "poc-ride-booked-v1"
-    ride-proposal: "poc-ride-proposed-v1"
+    ride-request-requested: "poc-ride-request-requested-v1"
+    ride-proposal-accepted: "poc-ride-proposal-accepted-v1"
+    ride-proposal-booked: "poc-ride-proposal-booked-v1"
+    ride-proposal-proposed: "poc-ride-proposal-proposed-v1"

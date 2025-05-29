@@ -35,9 +35,10 @@
                         <param>${schemaRegistryUrl}</param>
                     </schemaRegistryUrls>
                     <subjects>
-                        <poc-ride-requested-v1-value>${project.basedir}/src/main/resources/avro/ride-requested-schema.avsc</poc-ride-requested-v1-value>
-                        <poc-ride-to-accept-v1-value>${project.basedir}/src/main/resources/avro/ride-to-accept-schema.avsc</poc-ride-to-accept-v1-value>
-                        <poc-ride-booked-v1-value>${project.basedir}/src/main/resources/avro/ride-booked-schema.avsc</poc-ride-booked-v1-value>
+                        <poc-ride-request-requested-v1-value>${project.basedir}/src/main/resources/avro/ride-request-requested-schema.avsc</poc-ride-request-requested-v1-value>
+                        <poc-ride-proposal-accepted-v1-value>${project.basedir}/src/main/resources/avro/ride-proposal-accepted-schema.avsc</poc-ride-proposal-accepted-v1-value>
+                        <poc-ride-proposal-booked-v1-value>${project.basedir}/src/main/resources/avro/ride-proposal-booked-schema.avsc</poc-ride-proposal-booked-v1-value>
+                        <poc-ride-proposal-proposed-v1-value>${project.basedir}/src/main/resources/avro/ride-proposal-proposed-schema.avsc</poc-ride-proposal-proposed-v1-value>
                     </subjects>
                 </configuration>
                 <goals>

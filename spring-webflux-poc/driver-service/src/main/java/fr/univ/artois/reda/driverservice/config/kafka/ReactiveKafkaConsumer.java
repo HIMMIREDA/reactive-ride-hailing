@@ -1,7 +1,7 @@
 package fr.univ.artois.reda.driverservice.config.kafka;
 
-import fr.univ.artois.reda.avro.RideRequestedEvent;
-import fr.univ.artois.reda.avro.RideToAcceptEvent;
+import fr.univ.artois.reda.avro.RideProposalAcceptedEvent;
+import fr.univ.artois.reda.avro.RideRequestRequestedEvent;
 import fr.univ.artois.reda.driverservice.kafka.KafkaFluxRegistry;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
 import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
@@ -22,11 +22,11 @@ import java.util.Map;
 public class ReactiveKafkaConsumer {
 
 
-    @Value("${kafka.topics.ride-requested}")
-    private String rideRequestedTopicName;
+    @Value("${kafka.topics.ride-request-requested}")
+    private String rideRequestRequestedTopicName;
 
-    @Value("${kafka.topics.ride-to-accept}")
-    private String rideToAcceptTopicName;
+    @Value("${kafka.topics.ride-proposal-accepted}")
+    private String rideProposalAcceptedTopicName;
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
@@ -59,22 +59,21 @@ public class ReactiveKafkaConsumer {
     }
 
     @Bean
-    public ReactiveKafkaConsumerTemplate<String, RideRequestedEvent> reactiveRideRequestedKafkaConsumerTemplate(KafkaProperties kafkaProperties, KafkaFluxRegistry kafkaFluxRegistry) {
-        ReactiveKafkaConsumerTemplate<String, RideRequestedEvent> kafkaConsumerTemplate = new ReactiveKafkaConsumerTemplate<>(
-                createKafkaReceiverOptions(kafkaProperties, rideRequestedTopicName)
+    public ReactiveKafkaConsumerTemplate<String, RideRequestRequestedEvent> reactiveRideRequestRequestedKafkaConsumerTemplate(KafkaProperties kafkaProperties, KafkaFluxRegistry kafkaFluxRegistry) {
+        ReactiveKafkaConsumerTemplate<String, RideRequestRequestedEvent> kafkaConsumerTemplate = new ReactiveKafkaConsumerTemplate<>(
+                createKafkaReceiverOptions(kafkaProperties, rideRequestRequestedTopicName)
         );
-        kafkaFluxRegistry.registerFlux(rideRequestedTopicName, kafkaConsumerTemplate);
+        kafkaFluxRegistry.registerFlux(rideRequestRequestedTopicName, kafkaConsumerTemplate);
         return kafkaConsumerTemplate;
-
     }
 
 
     @Bean
-    public ReactiveKafkaConsumerTemplate<String, RideToAcceptEvent> reactiveRideToAcceptKafkaConsumerTemplate(KafkaProperties kafkaProperties, KafkaFluxRegistry kafkaFluxRegistry) {
-        ReactiveKafkaConsumerTemplate<String, RideToAcceptEvent> kafkaConsumerTemplate = new ReactiveKafkaConsumerTemplate<>(
-                createKafkaReceiverOptions(kafkaProperties, rideToAcceptTopicName)
+    public ReactiveKafkaConsumerTemplate<String, RideProposalAcceptedEvent> reactiveRideProposalAcceptedKafkaConsumerTemplate(KafkaProperties kafkaProperties, KafkaFluxRegistry kafkaFluxRegistry) {
+        ReactiveKafkaConsumerTemplate<String, RideProposalAcceptedEvent> kafkaConsumerTemplate = new ReactiveKafkaConsumerTemplate<>(
+                createKafkaReceiverOptions(kafkaProperties, rideProposalAcceptedTopicName)
         );
-        kafkaFluxRegistry.registerFlux(rideToAcceptTopicName, kafkaConsumerTemplate);
+        kafkaFluxRegistry.registerFlux(rideProposalAcceptedTopicName, kafkaConsumerTemplate);
         return kafkaConsumerTemplate;
     }
 }

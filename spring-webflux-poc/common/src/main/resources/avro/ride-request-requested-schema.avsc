@@ -1,0 +1,59 @@
+{
+  "type": "record",
+  "name": "RideRequestRequestedEvent",
+  "namespace": "fr.univ.artois.reda.avro",
+  "fields": [
+    {
+      "name": "rideRequestId",
+      "type": "string"
+    },
+    {
+      "name": "customerId",
+      "type": "string"
+    },
+    {
+      "name": "seats",
+      "type": "int"
+    },
+    {
+      "name": "preferredPrice",
+      "type": "double"
+    },
+    {
+      "name": "startLat",
+      "type": "double"
+    },
+    {
+      "name": "startLng",
+      "type": "double"
+    },
+    {
+      "name": "endLat",
+      "type": "double"
+    },
+    {
+      "name": "endLng",
+      "type": "double"
+    },
+    {
+      "name": "createdAt",
+      "type": "string"
+    },
+    {
+      "name": "customerEmail",
+      "type": "string"
+    },
+    {
+      "name": "customerFirstName",
+      "type": "string"
+    },
+    {
+      "name": "customerLastName",
+      "type": "string"
+    },
+    {
+      "name": "customerPhoneNumber",
+      "type": "string"
+    }
+  ]
+}

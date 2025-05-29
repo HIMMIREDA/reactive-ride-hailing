@@ -1,7 +1,7 @@
 package fr.univ.artois.reda.driverservice.config.kafka;
 
-import fr.univ.artois.reda.avro.RideProposalEvent;
-import fr.univ.artois.reda.avro.RideToAcceptEvent;
+import fr.univ.artois.reda.avro.RideProposalBookedEvent;
+import fr.univ.artois.reda.avro.RideProposalProposedEvent;
 import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
 import io.confluent.kafka.serializers.KafkaAvroSerializer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -27,7 +27,7 @@ public class ReactiveKafkaProducerConfig {
 
     @Value("${spring.kafka.properties.auto.register.schemas}")
     private boolean autoRegisterSchema;
-    
+
     private <U, T> ReactiveKafkaProducerTemplate<U, T> createProducerTemplate(KafkaProperties kafkaProperties) {
         Map<String, Object> props = kafkaProperties.buildProducerProperties();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -41,7 +41,12 @@ public class ReactiveKafkaProducerConfig {
     }
 
     @Bean
-    public ReactiveKafkaProducerTemplate<String, RideProposalEvent> rideProposalProducerTemplate(KafkaProperties kafkaProperties) {
+    public ReactiveKafkaProducerTemplate<String, RideProposalProposedEvent> rideProposalProposedEventReactiveKafkaProducerTemplate(KafkaProperties kafkaProperties) {
+        return createProducerTemplate(kafkaProperties);
+    }
+
+    @Bean
+    public ReactiveKafkaProducerTemplate<String, RideProposalBookedEvent> rideProposalBookedEventReactiveKafkaProducerTemplate(KafkaProperties kafkaProperties) {
         return createProducerTemplate(kafkaProperties);
     }
 }

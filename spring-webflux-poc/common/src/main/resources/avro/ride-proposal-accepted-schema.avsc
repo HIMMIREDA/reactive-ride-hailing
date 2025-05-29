@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "RideProposalAcceptedEvent",
+  "namespace": "fr.univ.artois.reda.avro",
+  "fields": [
+    {
+      "name": "rideRequestId",
+      "type": "string"
+    },
+    {
+      "name": "rideProposalId",
+      "type": "string",
+      "default": ""
+    }
+  ]
+}

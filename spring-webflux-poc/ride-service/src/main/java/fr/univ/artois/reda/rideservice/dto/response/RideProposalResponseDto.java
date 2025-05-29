@@ -2,15 +2,19 @@ package fr.univ.artois.reda.rideservice.dto.response;
 
 import lombok.*;
 
-import java.util.UUID;
-
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
 @Getter
 @Setter
+@Builder
 public class RideProposalResponseDto {
-    private UUID driverId;
+    private String rideProposalId;
+    private String rideRequestId;
+    private String driverId;
     private double price;
-    private UUID id;
+    private String createdAt;
+    private String driverEmail;
+    private String driverFirstName;
+    private String driverLastName;
+    private String driverPhoneNumber;
 }

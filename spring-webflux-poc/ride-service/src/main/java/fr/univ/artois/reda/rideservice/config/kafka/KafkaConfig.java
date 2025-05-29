@@ -8,32 +8,37 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class KafkaConfig {
 
-    @Value("${kafka.topics.ride-requested}")
-    private String rideRequestedTopicName;
+    @Value("${kafka.topics.ride-request-requested}")
+    private String rideRequestRequestedTopicName;
 
-    @Value("${kafka.topics.ride-to-accept}")
-    private String rideToAcceptTopicName;
+    @Value("${kafka.topics.ride-proposal-accepted}")
+    private String rideProposalAcceptedTopicName;
 
-    @Value("${kafka.topics.ride-booked}")
-    private String rideBookedTopicName;
+    @Value("${kafka.topics.ride-proposal-booked}")
+    private String rideProposalBookedTopicName;
 
-    @Value("${kafka.topics.ride-proposal}")
-    private String rideProposalTopicName;
+    @Value("${kafka.topics.ride-proposal-proposed}")
+    private String rideProposalProposedTopicName;
 
     @Bean
-    public NewTopic rideRequestedTopic(){
-        return new NewTopic(rideRequestedTopicName, 1, (short) 1);
+    public NewTopic rideRequestRequestedTopic() {
+        return new NewTopic(rideRequestRequestedTopicName, 1, (short) 1);
     }
+
     @Bean
-    public NewTopic rideAcceptedTopic(){
-        return new NewTopic(rideToAcceptTopicName, 1, (short) 1);
+    public NewTopic rideProposalAcceptedTopic() {
+        return new NewTopic(rideProposalAcceptedTopicName, 1, (short) 1);
     }
+
     @Bean
-    public NewTopic rideBookedTopic(){
-        return new NewTopic(rideBookedTopicName, 1, (short) 1);
+    public NewTopic rideProposalBookedTopic() {
+        return new NewTopic(rideProposalBookedTopicName, 1, (short) 1);
     }
+
     @Bean
-    public NewTopic rideProposalTopic(){
-        return new NewTopic(rideProposalTopicName, 1, (short) 1);
+    public NewTopic rideProposalProposedTopic() {
+        return new NewTopic(rideProposalProposedTopicName, 1, (short) 1);
     }
+
 }
+

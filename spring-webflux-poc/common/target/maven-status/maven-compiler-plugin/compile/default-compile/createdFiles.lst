@@ -1,2 +1,9 @@
-fr/univ/artois/reda/avro/RideProposalEvent$Builder.class
-fr/univ/artois/reda/avro/RideProposalEvent.class
+fr/univ/artois/reda/avro/RideProposalAcceptedEvent.class
+fr/univ/artois/reda/avro/RideProposalProposedEvent$Builder.class
+fr/univ/artois/reda/avro/RideProposalProposedEvent.class
+fr/univ/artois/reda/avro/RideRequestRequestedEvent$Builder.class
+fr/univ/artois/reda/avro/RideRequestRequestedEvent.class
+fr/univ/artois/reda/avro/RideProposalBookedEvent$Builder.class
+fr/univ/artois/reda/Main.class
+fr/univ/artois/reda/avro/RideProposalBookedEvent.class
+fr/univ/artois/reda/avro/RideProposalAcceptedEvent$Builder.class

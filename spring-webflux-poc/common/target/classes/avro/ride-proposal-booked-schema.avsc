@@ -1,0 +1,43 @@
+{
+  "type": "record",
+  "name": "RideProposalBookedEvent",
+  "namespace": "fr.univ.artois.reda.avro",
+  "fields": [
+    {
+      "name": "rideProposalId",
+      "type": "string"
+    },
+    {
+      "name": "rideRequestId",
+      "type": "string"
+    },
+    {
+      "name": "driverId",
+      "type": "string"
+    },
+    {
+      "name": "price",
+      "type": "double"
+    },
+    {
+      "name": "createdAt",
+      "type": "string"
+    },
+    {
+      "name": "driverEmail",
+      "type": "string"
+    },
+    {
+      "name": "driverFirstName",
+      "type": "string"
+    },
+    {
+      "name": "driverLastName",
+      "type": "string"
+    },
+    {
+      "name": "driverPhoneNumber",
+      "type": "string"
+    }
+  ]
+}
