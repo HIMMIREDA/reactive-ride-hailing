@@ -6,17 +6,17 @@ spring:
     properties:
         schema.registry.url: http://localhost:8081
         auto.register.schemas: false
+    consumer:
+      group-id: driver-service-consumer-group
+      auto-offset-reset: earliest
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/drives?replicaSet=rs0
 
-  r2dbc:
-    url: r2dbc:postgresql://localhost:15432/drives
-    username: artois
-    password: artois123
-  flyway:
-    url: jdbc:postgresql://localhost:15432/drives
-    locations: classpath:db/migration
-
+      auto-index-creation: true
 kafka:
   topics:
     ride-requested: "poc-ride-requested-v1"
     ride-to-accept: "poc-ride-to-accept-v1"
     ride-booked: "poc-ride-booked-v1"
+    ride-proposal: "poc-ride-proposed-v1"

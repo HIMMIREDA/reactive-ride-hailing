@@ -47,7 +47,7 @@ public class ReactiveKafkaProducerConfig {
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         props.put(KafkaAvroDeserializerConfig.SCHEMA_REGISTRY_URL_CONFIG, schemaRegistryUrl);
-        props.put(KafkaAvroDeserializerConfig.AUTO_REGISTER_SCHEMAS, false);
+        props.put(KafkaAvroDeserializerConfig.AUTO_REGISTER_SCHEMAS, autoRegisterSchema);
         return new ReactiveKafkaProducerTemplate<U, T>(SenderOptions.create(props));
     }
 }

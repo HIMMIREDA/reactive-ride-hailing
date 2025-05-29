@@ -17,6 +17,9 @@ public class KafkaConfig {
     @Value("${kafka.topics.ride-booked}")
     private String rideBookedTopicName;
 
+    @Value("${kafka.topics.ride-proposal}")
+    private String rideProposalTopicName;
+
     @Bean
     public NewTopic rideRequestedTopic(){
         return new NewTopic(rideRequestedTopicName, 1, (short) 1);
@@ -29,5 +32,8 @@ public class KafkaConfig {
     public NewTopic rideBookedTopic(){
         return new NewTopic(rideBookedTopicName, 1, (short) 1);
     }
-
+    @Bean
+    public NewTopic rideProposalTopic(){
+        return new NewTopic(rideProposalTopicName, 1, (short) 1);
+    }
 }

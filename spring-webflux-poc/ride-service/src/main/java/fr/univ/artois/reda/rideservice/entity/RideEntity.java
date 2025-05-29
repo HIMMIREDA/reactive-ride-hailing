@@ -14,7 +14,7 @@
     @NoArgsConstructor
     @Getter @Setter
     @Builder
-    @Table("ride_requests")
+    @Table("rides")
     public class RideEntity {
         @Id
         private UUID id;

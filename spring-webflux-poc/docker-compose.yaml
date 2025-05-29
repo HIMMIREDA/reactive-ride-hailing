@@ -66,6 +66,34 @@ services:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+  mongodb:
+    image: mongo:6-jammy
+    container_name: mongodb
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    command: >
+      bash -c '
+        mongod --replSet rs0 --bind_ip_all &
+        until mongosh --eval "db.adminCommand(\"ping\")"; do sleep 1; done;
+        mongosh --eval "
+          rs.initiate({
+            _id: \"rs0\",
+            version: 1,
+            members: [{ _id: 0, host: \"localhost:27017\" }]
+          });
+        ";
+        wait
+      '
+
+#  mongodb:
+#    image: mongo:6-jammy
+#    ports:
+#      - '27017:27017'
+#    volumes:
+#      - mongo_data:/data/db
 
 volumes:
+  mongo_data:
   db_data:
