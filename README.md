@@ -32,8 +32,7 @@
 8.  [POC pratique](#8-poc-pratique)
     * [Pré-requis](#81-pré-requis)
     * [Lancement du POC](#82-lancement-du-poc)
-    * [Architecture de l'application](#84-architecture-de-lapplication)
-    * [Fonctionnalités](#85-fonctionnalités)
+    * [Fonctionnalités](#83-fonctionnalités)
 9.  [Références](#9-références)
 
 ## 1. Introduction
@@ -213,6 +212,7 @@ Les **opérations d'E/S non bloquantes** (**Non-Blocking IO**) permettent à un 
 
 
 ## 5. Implémentations Java de la programmation réactive
+
 Plusieurs librairies Java facilitent l'adoption du paradigme de la programmation réactive. Parmi les plus notables, on trouve :
 
 * **[Project Reactor](https://projectreactor.io/) :** Développé par Pivotal (maintenant VMware), Reactor est une implémentation de la spécification **Reactive Streams**. Il fournit les types fondamentaux **Flux** (pour les séquences de 0 à N éléments) et **Mono** (pour les séquences de 0 ou 1 élément), et met l'accent sur le back pressure et un riche ensemble d'opérateurs pour la manipulation asynchrone de flux de données non bloquants. Reactor est notamment la base réactive de Spring WebFlux. C'est notre sujet de POC avec **Spring WebFlux**.
@@ -250,7 +250,7 @@ En résumé, `Publisher` est l'interface, `Flux` est l'implémentation pour les 
 
 Remarque: **Il est aussi important de noter qu'un `Publisher` ne commence à émettre des éléments que lorsqu'un `Subscriber` s'y abonne via la méthode `subscribe()` ou `subscribe(Consumer<? super T> consumer)`**
 
-#### 5.2.2 Opérateurs essentiels
+#### 5.1.2 Opérateurs essentiels
 
 1.  `just()`: Crée un `Flux` ou un `Mono` qui émet les éléments passés en paramètre, puis se complète. C'est un moyen simple de créer un Publisher statique.
 <figure>
@@ -430,7 +430,7 @@ Flux.just(1, 2)
         .subscribe(null, System.err::println);
 ```
 
-#### 5.3.3 Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn
+#### 5.1.3 Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn
 
 Dans **Reactor**, les **Schedulers** sont essentiels pour gérer l'exécution asynchrone et éviter les blocages des threads. Ils définissent sur quels threads les opérations des flux réactifs vont s'exécuter.
 
@@ -464,15 +464,16 @@ Pour utiliser ces schedulers, **Reactor** fournit deux opérateurs clés **`subs
 ### 6.1 Architecture et principes
 Spring WebFlux, par sa conception réactive, influence profondément son modèle de threading et le cycle de vie des requêtes. Étant donné que le starter Spring Boot WebFlux inclut Netty comme serveur embarqué par défaut, notre exploration de l'architecture et du modèle de threading se focalisera sur cette implémentation.
 
-#### 6.2 Cycle de vie d'une requête dans Spring WebFlux
+#### 6.1.1 EventLoop Thread
+
+Un **EventLoop** est un **thread** unique et non bloquant, géré par **Netty**, qui constitue le modèle de **non-blocking IO** utilisé par **Spring WebFlux**. Au lieu d'attendre passivement les opérations I/O, il surveille en permanence plusieurs canaux de socket (**SocketChannels**) à la recherche d'événements. Lorsqu'un événement se produit, l'**EventLoop** délègue le traitement à un handler dans le pipeline de canaux. Cette approche permet à un petit nombre de threads de gérer efficacement un grand nombre de connexions. Il est crucial de ne pas bloquer l'**EventLoop** pour maintenir la réactivité du serveur.
+
+#### 6.1.2 Cycle de vie d'une requete dans Spring Webflux
+
 <figure>
   <img width="600" src="images/spring_webflux_threading_model.png" alt="Spring Webflux Threading Model" title="Spring Webflux Threading Model">
   <figcaption style="text-align: center;"><strong>Spring Webflux Threading Model</strong> - source: <a href="https://singhkaushal.medium.com/spring-webflux-eventloop-vs-thread-per-request-model-a42d07ee8502/">Spring Webflux</a></figcaption>
 </figure>
-
-Un **EventLoop** est un **thread** unique et non bloquant, géré par **Netty**, qui constitue le modèle de **non-blocking IO** utilisé par **Spring WebFlux**. Au lieu d'attendre passivement les opérations I/O, il surveille en permanence plusieurs canaux de socket (**SocketChannels**) à la recherche d'événements. Lorsqu'un événement se produit, l'**EventLoop** délègue le traitement à un handler dans le pipeline de canaux. Cette approche permet à un petit nombre de threads de gérer efficacement un grand nombre de connexions. Il est crucial de ne pas bloquer l'**EventLoop** pour maintenir la réactivité du serveur.
-
-Cycle de vie d'une requête dans Spring WebFlux:
 
 1. **Request -> Socket Channel** : une requête HTTP est reçue par un **Socket Channel** géré par Netty.
 2. **Inbound Channel Handler -> EventLoop (Netty thread)** : La requête traverse le **Inbound Channel Handler** et est transmise au thread **EventLoop** de Netty.
@@ -700,11 +701,10 @@ mvn spring-boot:run
 8.  [MongoDB](https://www.mongodb.com/) et [Spring Data MongoDB Reactive](https://www.baeldung.com/spring-data-mongodb-reactive).
 9.  [Spring for Apache Kafka Reactive](https://spring.io/projects/spring-kafka)
 
-## 8.4 Architecture de l'application
+## 8.4 Fonctionnalités
 
 Ce POC est une simple application illustrant la programmation réactive avec **Spring Webflux** et **Reactor**, ainsi que la connexion aux bases de données en mode réactif avec **Spring Data R2DBC** et **Spring Data MongoDB Reactive** et **Spring Kafka**.
 
-## 8.5 Fonctionnalités
 
 * L'utilisateur peut créer un compte en tant que `USER` ou `DRIVER`. Après cela, il s'authentifie et récupère son **token JWT**.
 
