@@ -337,7 +337,9 @@ Flux.just(1, 2)
 </figure>
 
 ```java
-    Flux.just("one", "two").delayElements(java.time.Duration.ofSeconds(1)).subscribe(System.out::println);
+    Flux.just("one", "two")
+        .delayElements(java.time.Duration.ofSeconds(1))
+        .subscribe(System.out::println);
 ```
 
 9. `take(long n)` : émet seulement les n premiers éléments, puis se complète.
@@ -347,7 +349,9 @@ Flux.just(1, 2)
 </figure>
 
 ```java
-    Flux.range(1, 10).take(3).subscribe(System.out::println);
+    Flux.range(1, 10)
+        .take(3)
+        .subscribe(System.out::println);
 ```
 
 10. `interval(Duration period)` : crée un Flux qui émet des Longs à intervalles réguliers.
@@ -357,7 +361,9 @@ Flux.just(1, 2)
 </figure>
 
 ```java
-    Flux.interval(java.time.Duration.ofMillis(300)).take(5).subscribe(System.out::println);
+    Flux.interval(java.time.Duration.ofMillis(300))
+        .take(5)
+        .subscribe(System.out::println);
     // Output: 0, 1, 2, 3, 4 (émis avec un délai de 300ms entre chaque élément)
 ```
 
@@ -392,7 +398,8 @@ Flux.just(1, 2)
 </figure>
 
 ```java
-    Flux.just("start").doOnSubscribe(sub -> System.out.println("Subscribed!")).subscribe(System.out::println);
+    Flux.just("start")
+        .doOnSubscribe(sub -> System.out.println("Subscribed!")).subscribe(System.out::println);
 ```
 
 13. `doOnComplete(Runnable onComplete)` : Permet d'exécuter une action lorsque le `Publisher` se complète avec succès (appel de `onComplete()` du `Subscriber`).
@@ -402,7 +409,9 @@ Flux.just(1, 2)
 </figure>
 
 ```java
-    Mono.just("done").doOnComplete(() -> System.out.println("Mono completed")).subscribe(System.out::println);
+    Mono.just("done")
+        .doOnComplete(() -> System.out.println("Mono completed"))
+        .subscribe(System.out::println);
 ```
 
 14. `doOnError(Consumer<? super Throwable> onError)` : Permet d'exécuter une action lorsqu'une erreur se produit (appel de `onError(Throwable t)` du `Subscriber`).
@@ -412,7 +421,9 @@ Flux.just(1, 2)
 </figure>
 
 ```java
-    Flux.error(new RuntimeException("Something went wrong")).doOnError(e -> System.err.println("Error caught!")).subscribe(null, System.err::println);
+    Flux.error(new RuntimeException("Something went wrong"))
+        .doOnError(e -> System.err.println("Error caught!"))
+        .subscribe(null, System.err::println);
 ```
 
 #### 5.3.3 Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn
