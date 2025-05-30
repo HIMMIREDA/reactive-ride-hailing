@@ -54,7 +54,6 @@ public class RideRequestController {
             @RequestBody AcceptRideProposalRequestDto acceptRideProposalRequestDto
     ){
 
-        System.out.println("accepted: "+acceptRideProposalRequestDto.getRideProposalId());
         CustomerInternalDto customerInternalDto = CustomerInternalDto.builder()
                 .customerId(userId)
                 .customerRole(role)

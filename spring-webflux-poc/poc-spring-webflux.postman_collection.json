@@ -13,7 +13,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"email\": \"reda@gmail.com\",\n    \"password\": \"reda123\",\n    \"firstName\": \"reda\",\n    \"lastName\": \"himmi\",\n    \"role\": \"USER\",\n    \"phoneNumber\": \"0612218950\"\n}",
+					"raw": "{\n    \"email\": \"redrive1@gmail.com\",\n    \"password\": \"redriver123\",\n    \"firstName\": \"redriver1\",\n    \"lastName\": \"himmi\",\n    \"role\": \"DRIVER\",\n    \"phoneNumber\": \"0612218950\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -21,12 +21,12 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8082/api/users",
+					"raw": "http://localhost:8085/api/users",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8082",
+					"port": "8085",
 					"path": [
 						"api",
 						"users"
@@ -42,7 +42,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"email\": \"reda@gmail.com\",\n    \"password\": \"reda123\",\n    \"role\": \"USER\"\n}",
+					"raw": "{\n    \"email\": \"redrive1@gmail.com\",\n    \"password\": \"redriver123\",\n    \"role\": \"DRIVER\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -50,12 +50,12 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8082/api/users/auth",
+					"raw": "http://localhost:8085/api/users/auth",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8082",
+					"port": "8085",
 					"path": [
 						"api",
 						"users",
@@ -68,6 +68,16 @@
 		{
 			"name": "[USER] create a ride request",
 			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI4YzFkMzNiNS1iODVmLTRjNmQtYjczYS0yYjYxOTkyYzNhNTIiLCJyb2xlIjoiVVNFUiIsImVtYWlsIjoicmVkYUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRhIiwibGFzdE5hbWUiOiJoaW1taSIsInBob25lTnVtYmVyIjoiMDYxMjIxODk1MCIsImlhdCI6MTc0ODY0MTgxNywiZXhwIjoxNzQ4NzI4MjE3fQ.rDVKmaY9LpunkOtmnzd4fCmeHpRum-qdK4sV9HoHtObVOve_N21BYF7xPj4TXNrfDIT3KQ-WsTC_v339oko5Bw",
+							"type": "string"
+						}
+					]
+				},
 				"method": "POST",
 				"header": [
 					{
@@ -111,12 +121,12 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8083/api/rides",
+					"raw": "http://localhost:8085/api/rides",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8083",
+					"port": "8085",
 					"path": [
 						"api",
 						"rides"
@@ -128,6 +138,16 @@
 		{
 			"name": "[USER] accept ride proposal",
 			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI4YzFkMzNiNS1iODVmLTRjNmQtYjczYS0yYjYxOTkyYzNhNTIiLCJyb2xlIjoiVVNFUiIsImVtYWlsIjoicmVkYUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRhIiwibGFzdE5hbWUiOiJoaW1taSIsInBob25lTnVtYmVyIjoiMDYxMjIxODk1MCIsImlhdCI6MTc0ODY0MTgxNywiZXhwIjoxNzQ4NzI4MjE3fQ.rDVKmaY9LpunkOtmnzd4fCmeHpRum-qdK4sV9HoHtObVOve_N21BYF7xPj4TXNrfDIT3KQ-WsTC_v339oko5Bw",
+							"type": "string"
+						}
+					]
+				},
 				"method": "PUT",
 				"header": [
 					{
@@ -163,7 +183,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"rideProposalId\": \"4477adcf-eb7a-4f9a-91e8-c01d33d0b1b3\"\n}",
+					"raw": "{\n    \"rideProposalId\": \"48ff06e1-f937-4f2f-ae04-a6ec1b524d7e\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -171,16 +191,16 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8083/api/rides/e9fe84a8-39ec-4387-8176-994f8ac5ee5f/accept",
+					"raw": "http://localhost:8085/api/rides/9748f423-a8ce-4c32-91c9-eaccd2f809ca/accept",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8083",
+					"port": "8085",
 					"path": [
 						"api",
 						"rides",
-						"e9fe84a8-39ec-4387-8176-994f8ac5ee5f",
+						"9748f423-a8ce-4c32-91c9-eaccd2f809ca",
 						"accept"
 					]
 				}
@@ -190,6 +210,16 @@
 		{
 			"name": "[USER] get ride proposals",
 			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI4YzFkMzNiNS1iODVmLTRjNmQtYjczYS0yYjYxOTkyYzNhNTIiLCJyb2xlIjoiVVNFUiIsImVtYWlsIjoicmVkYUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRhIiwibGFzdE5hbWUiOiJoaW1taSIsInBob25lTnVtYmVyIjoiMDYxMjIxODk1MCIsImlhdCI6MTc0ODY0MTgxNywiZXhwIjoxNzQ4NzI4MjE3fQ.rDVKmaY9LpunkOtmnzd4fCmeHpRum-qdK4sV9HoHtObVOve_N21BYF7xPj4TXNrfDIT3KQ-WsTC_v339oko5Bw",
+							"type": "string"
+						}
+					]
+				},
 				"method": "GET",
 				"header": [
 					{
@@ -224,16 +254,16 @@
 					}
 				],
 				"url": {
-					"raw": "http://localhost:8083/api/rides/e9fe84a8-39ec-4387-8176-994f8ac5ee5f/proposals/stream",
+					"raw": "http://localhost:8085/api/rides/9748f423-a8ce-4c32-91c9-eaccd2f809ca/proposals/stream",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8083",
+					"port": "8085",
 					"path": [
 						"api",
 						"rides",
-						"e9fe84a8-39ec-4387-8176-994f8ac5ee5f",
+						"9748f423-a8ce-4c32-91c9-eaccd2f809ca",
 						"proposals",
 						"stream"
 					]
@@ -244,6 +274,16 @@
 		{
 			"name": "[DRIVER] get nearby ride requests",
 			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyODIwMjc5OC0wNjhkLTQ4ZGMtOWZlMS1lNTg5NGYyNmI1NGMiLCJyb2xlIjoiRFJJVkVSIiwiZW1haWwiOiJyZWRyaXZlMUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRyaXZlcjEiLCJsYXN0TmFtZSI6ImhpbW1pIiwicGhvbmVOdW1iZXIiOiIwNjEyMjE4OTUwIiwiaWF0IjoxNzQ4NjQyNjQ4LCJleHAiOjE3NDg3MjkwNDh9.qODmtstKzNvwXeFE5T0AanuCqM0IdEUuOMtFfoRp7u9ymHjrxf5NsxRh5BWk4Q9pwmqc0kWr3IqSbokz1KxxTw",
+							"type": "string"
+						}
+					]
+				},
 				"method": "GET",
 				"header": [
 					{
@@ -278,12 +318,12 @@
 					}
 				],
 				"url": {
-					"raw": "http://localhost:8084/api/rides/nearby/stream?lat=33.3&lng=20.2&radius=100",
+					"raw": "http://localhost:8085/api/rides/nearby/stream?lat=33.3&lng=20.2&radius=100",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8084",
+					"port": "8085",
 					"path": [
 						"api",
 						"rides",
@@ -312,7 +352,14 @@
 			"name": "[DRIVER] propose a ride proposal",
 			"request": {
 				"auth": {
-					"type": "noauth"
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyODIwMjc5OC0wNjhkLTQ4ZGMtOWZlMS1lNTg5NGYyNmI1NGMiLCJyb2xlIjoiRFJJVkVSIiwiZW1haWwiOiJyZWRyaXZlMUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRyaXZlcjEiLCJsYXN0TmFtZSI6ImhpbW1pIiwicGhvbmVOdW1iZXIiOiIwNjEyMjE4OTUwIiwiaWF0IjoxNzQ4NjQzOTQ2LCJleHAiOjE3NDg3MzAzNDZ9.qCGIJuHJSctVevQXg0Z6Peikqn2rgtn10QRh3U37gjuvAbehqsUxMAe_IRAXSo6vzd3FpHyCd1w-4cVFfj2xjw",
+							"type": "string"
+						}
+					]
 				},
 				"method": "POST",
 				"header": [
@@ -349,7 +396,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"rideRequestId\": \"e9fe84a8-39ec-4387-8176-994f8ac5ee5f\",\n    \"price\": 300.4\n}",
+					"raw": "{\n    \"rideRequestId\": \"9748f423-a8ce-4c32-91c9-eaccd2f809ca\",\n    \"price\": 300.4\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -357,12 +404,12 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8084/api/rides/proposals",
+					"raw": "http://localhost:8085/api/rides/proposals",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "8084",
+					"port": "8085",
 					"path": [
 						"api",
 						"rides",

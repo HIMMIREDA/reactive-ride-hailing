@@ -1,0 +1,31 @@
+server:
+  port: 8085
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.web.server: DEBUG
+
+jwt:
+  secret: abscx12219kksjanxyauopax01n$bsbsbeqx!sq$hhbnbazazaz$snwas!=&$xw&és$!wxw$w
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/users/**
+
+            - id: driver-service
+              uri: http://localhost:8084
+              predicates:
+                - Path=/api/rides/proposals, /api/rides/nearby/stream
+
+            - id: ride-service
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/rides/**
+

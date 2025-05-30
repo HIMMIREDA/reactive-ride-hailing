@@ -22,6 +22,7 @@
         <module>ride-service</module>
         <module>driver-service</module>
         <module>common</module>
+        <module>api-gateway</module>
     </modules>
     <artifactId>spring-webflux-poc</artifactId>
     <dependencies>
