@@ -209,7 +209,7 @@ Comme mentionné précédemment, `Publisher<T>` est l'interface fondamentale de 
     user.subscribe(u -> System.out.println("User: " + u));
 
     Mono<Void> op = Mono.empty().doOnTerminate(() -> System.out.println("Opération terminée."));
-    operationTerminee.subscribe();
+    op.subscribe();
     ```
 
 En résumé, `Publisher` est l'interface, `Flux` est l'implémentation pour les séquences de **0 à n** éléments, et `Mono` est l'implémentation pour les séquences de **0 ou 1** élément.
@@ -384,8 +384,6 @@ Flux.just(1, 2)
 ```
 
 #### 5.3.3 Schedulers.boundedElastic & parallel, subscribeOn , publishOn
-
-#### 5.2.3 Reactor Netty
 
 #### 5.2.4 Reactor Kafka
 
