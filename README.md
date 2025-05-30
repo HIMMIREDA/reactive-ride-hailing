@@ -32,8 +32,10 @@
 8.  [POC pratique](#8-poc-pratique)
     * [Pré-requis](#81-pré-requis)
     * [Lancement du POC](#82-lancement-du-poc)
-    * [Architecture de l'application](#82-architecture-de-lapplication)
+    * [Architecture de l'application](#84-architecture-de-lapplication)
+    * [Fonctionnalités](#85-fonctionnalités)
 9.  [Références](#9-références)
+
 ## 1. Introduction
 
 Depuis plusieurs années, le développement web en Java repose sur les servlets, un modèle synchrone et bloquant (modèle thread/request). Cependant, ce modèle devient rapidement inefficace dans les applications modernes et les
@@ -326,7 +328,8 @@ Flux.just(1, 2)
 
 ```java
 Flux.just(1, 2)
-    .concatMap(x -> Mono.just("value " + x).delayElement(java.time.Duration.ofMillis(100 * x)))
+    .concatMap(x -> Mono.just("value " + x)
+    .delayElement(java.time.Duration.ofMillis(100 * x)))
     .subscribe(System.out::println);  // va afficher: "value: 1" puis "value: 2"
 ```
 
@@ -399,7 +402,8 @@ Flux.just(1, 2)
 
 ```java
     Flux.just("start")
-        .doOnSubscribe(sub -> System.out.println("Subscribed!")).subscribe(System.out::println);
+        .doOnSubscribe(sub -> System.out.println("Subscribed!"))
+        .subscribe(System.out::println);
 ```
 
 13. `doOnComplete(Runnable onComplete)` : Permet d'exécuter une action lorsque le `Publisher` se complète avec succès (appel de `onComplete()` du `Subscriber`).
@@ -476,7 +480,7 @@ Cycle de vie d'une requête dans Spring WebFlux:
 4. **Scheduler/Worker Thread -> Spring WebFlux Controller/Service** : Le **Worker Thread** exécute le code potentiellement bloquant.
 5. **Scheduler/Worker Thread -> ScheduledTaskQueue** : Une fois l'opération bloquante terminée et le résultat prêt à être envoyé, le Worker Thread place une tâche contenant la réponse dans la `ScheduledTaskQueue`.
 6. **EventLoop -> ScheduledTaskQueue** : L'**EventLoop** interroge la `ScheduledTaskQueue` pour les tâches terminées.
-7. **EventLoop -> Outbound Channel Handler -> Socket Channel -> Response** : L'**EventLoop** récupère la tâche de réponse de la `ScheduledTaskQueue`, la traite via le **Outbound Channel Handler** et l'envoie de manière non bloquante au client via le **Socket Channel**.
+7. **EventLoop -> Outbound Channel Handler -> Socket Channel -> Response** : L'**EventLoop** récupère la tâche d****e réponse de la `ScheduledTaskQueue`, la traite via le **Outbound Channel Handler** et l'envoie de manière non bloquante au client via le **Socket Channel**.
 
 Cette approche permet à **Spring WebFlux** de gérer un grand nombre de requêtes simultanées avec un nombre limité de threads.
 
@@ -573,9 +577,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.reactive.ReactiveKafkaConsumerTemplate;
 import org.springframework.kafka.core.ConsumerFactory;
-import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
-import org.springframework.kafka.listener.ReactiveMessageListenerContainer;
-import org.springframework.kafka.listener.ContainerProperties;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
@@ -592,7 +593,7 @@ public class KafkaConsumerConfig {
         props.put(org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         props.put(org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG, "my-spring-reactive-group");
         props.put(org.apache.kafka.clients.consumer.ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
         props.put(org.apache.kafka.clients.consumer.ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         return props;
     }
@@ -639,7 +640,7 @@ public class KafkaProducerConfig {
         Map<String, Object> props = new HashMap<>();
         props.put(org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         props.put(org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        props.put(org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
         return props;
     }
 
@@ -663,11 +664,14 @@ public class KafkaProducerConfig {
 ```
 
 ## 8. POC pratique
-### 8.1 Pré-requis
-1. Java 21 & Maven
-2. Docker & Docker Compose
 
-### 8.2 Lancement du POC
+## 8.1 Pré-requis
+
+1.  Java 21 & Maven
+2.  Docker & Docker Compose
+
+## 8.2 Lancement du POC
+
 ```bash
 cd spring-webflux-poc
 docker compose up -d
@@ -680,10 +684,46 @@ cd ../ride-service
 mvn spring-boot:run
 cd ../driver-service
 mvn spring-boot:run
+cd ../api-gateway
+mvn spring-boot:run
 ```
 
-### 8.2 Architecture de l'application
+## 8.3 Technologies utilisées
 
+1.  [Spring Webflux](https://docs.spring.io/spring-framework/reference/web/webflux.html)
+2.  [Spring Security](https://spring.io/projects/spring-security)
+3.  [Spring Cloud Gateway Reactive](https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway.html)
+4.  [Apache Kafka](https://kafka.apache.org/)
+5.  [Confluent Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
+6.  [Apache Avro](https://avro.apache.org/) comme format de **sérialisation** et **désérialisation** des messages kafka.
+7.  [PostgreSQL](https://www.postgresql.org/) et [Spring Data R2DBC]().
+8.  [MongoDB](https://www.mongodb.com/) et [Spring Data MongoDB Reactive](https://www.baeldung.com/spring-data-mongodb-reactive).
+9.  [Spring for Apache Kafka Reactive](https://spring.io/projects/spring-kafka)
+
+## 8.4 Architecture de l'application
+
+Ce POC est une simple application illustrant la programmation réactive avec **Spring Webflux** et **Reactor**, ainsi que la connexion aux bases de données en mode réactif avec **Spring Data R2DBC** et **Spring Data MongoDB Reactive** et **Spring Kafka**.
+
+## 8.5 Fonctionnalités
+
+* L'utilisateur peut créer un compte en tant que `USER` ou `DRIVER`. Après cela, il s'authentifie et récupère son **token JWT**.
+
+* Un utilisateur possédant le rôle `USER` peut créer des demandes de courses (**Ride Requests**). Il peut également voir en temps réel (implémenté avec SSE - **Server-Sent Events**) les propositions de plusieurs conducteurs (`DRIVER`) et finalement accepter une proposition de course.
+
+* Un utilisateur possédant le rôle `DRIVER` peut voir en temps réel les demandes de courses près de lui (implémenté avec SSE - **Server-Sent Events**) et répondre à une demande par une proposition.
+
+L'application est découpée en trois **micro-services** qui se trouvent derrière une **API Gateway** :
+
+* **auth-service** : Ce micro-service gère l'inscription et l'authentification. Il utilise **PostgreSQL** comme base de données.
+* **ride-service** : Ce micro-service permet de créer des demandes de courses, de voir les propositions des conducteurs et d'accepter une proposition. Il utilise **PostgreSQL** comme base de données.
+* **driver-service** : Ce micro-service permet de voir les demandes de courses près du conducteur et de proposer des courses. Il utilise **MongoDB** comme base de données.
+* **api-gateway** : Point d'entrée de notre POC, elle redirige les requêtes vers le bon micro-service et gère l'autorisation.
+
+-----
+
+* Quand le client (`USER`) crée une demande de course, il envoie une requête à `ride-service` (`/api/rides`). La demande de course est stockée dans la table **PostgreSQL** `ride_requests` avec le statut `REQUESTED`. Ensuite, celle-ci est publiée sur un **topic Kafka** (`poc-ride-request-requested-v1`) et consommée par `driver-service`, qui la stocke dans une collection **MongoDB** `ride_requests`. En temps réel, la requête est affichée aux conducteurs qui se situent près du client.
+* Les conducteurs (`DRIVER`) proposent des courses pour cette demande avec des prix, en utilisant l'endpoint `/api/rides/proposals` de `driver-service`. Cette proposition est stockée dans la collection **MongoDB** `ride_proposals` et publiée sur un **topic Kafka** (`poc-ride-request-proposed-v1`). Elle est ensuite consommée par `ride-service`, qui affiche cette proposition au client en temps réel.
+* Le client peut maintenant accepter une proposition en passant par l'endpoint `/api/rides/{rideRequestId}/accept` de `ride-service`. La demande de course passe alors au statut `ACCEPTED` et est publiée dans un **topic Kafka** (`poc-ride-request-accepted-v1`). Ce message est consommé par `driver-service`, qui confirme la réservation en mettant le statut de la demande de course à `BOOKED` et notifie `ride-service` que le conducteur est réservé en publiant un message sur le **topic Kafka** (`poc-ride-request-booked-v1`). Finalement, `ride-service` modifie le statut de la demande à `BOOKED`.
 
 ## 9. Références
 * [Project Reactor](https://projectreactor.io)

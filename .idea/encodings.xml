@@ -3,6 +3,7 @@
   <component name="Encoding">
     <file url="file://$PROJECT_DIR$/reactor-poc/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/reactor-poc/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/spring-webflux-poc/api-gateway/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/spring-webflux-poc/auth-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/spring-webflux-poc/common/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/spring-webflux-poc/driver-service/src/main/java" charset="UTF-8" />
