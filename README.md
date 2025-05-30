@@ -155,6 +155,12 @@ Cette méthode est appelée par un `Subscriber` pour commencer à recevoir les �
    * `request(long n)` : permet au `Subscriber` de demander au `Publisher` d'émettre au plus `n` éléments supplémentaires. C'est le mécanisme clé pour implémenter le back pressure.
    * `cancel()` : Permet au `Subscriber` d'annuler sa souscription, signifiant qu'il ne souhaite plus recevoir d'éléments.
 
+* **`Processor<T, R>` :** représente un composant qui est à la fois un `Subscriber<T>` et un `Publisher<R>`. Il peut recevoir des éléments, les traiter, et ensuite publier le résultat. C'est utile pour les étapes intermédiaires dans une chaîne de traitement. L'interface `Processor` étend les deux interfaces :
+    ```java
+    public interface Processor<T, R> extends Subscriber<T>, Publisher<R> {
+    }
+    ```
+  
 ### 4.3 Concepts clés (Back pressure, Event-loop, Non-blocking I/O)
 #### 4.3.1 Back pressure
 <figure>
@@ -181,16 +187,201 @@ Plusieurs librairies Java facilitent l'adoption du paradigme de la programmation
 
 * **[Mutiny](https://smallrye.io/smallrye-mutiny/2.4.0/) :** Développé par Red Hat, Mutiny offre une API réactive plus impérative pour Java et Kotlin, avec les types **Multi** et **Uni** pour les flux et les résultats uniques.
 
-### 5.2 Project Reactor en détail
-#### 5.2.1 Reactor Core (Flux vs Mono vs Publisher)
-Au coeur de **Project Reactor** et de la spécification **Reactive Streams** se trouve l'interface `Publisher<T>` . Elle est définie par une unique méthode :
-```java
-public interface Publisher<T> {
-public void subscribe(Subscriber<? super T> s);
-}
-``` 
+### 5.1 Project Reactor en détail
+#### 5.1.1 Reactor Core (Flux vs Mono vs Publisher)
+Au coeur de **Project Reactor** et de la spécification **Reactive Streams** se trouve l'interface `Publisher<T>` [Voir la section Reactive Streams vs jdk9](#42-linitiative-reactive-streams-vs-jdk9).
+Comme mentionné précédemment, `Publisher<T>` est l'interface fondamentale de Reactive Streams, représentant une source de données asynchrones. Project Reactor fournit deux implémentations principales de cette interface: `Flux` et `Mono`.
+
+* **`Flux<T>` :** Est un `Publisher` qui peut émettre une séquence de **0 à n** éléments. Il est utilisé pour représenter un flux de données qui peut contenir plusieurs éléments, qu'ils arrivent de manière continue (**Stream of events**) ou à la fin d'une opération.
+
+   ```java
+    Flux<String> items = Flux.just("Reda", "Java", "Golang", "ILI");
+    items.subscribe(item -> System.out.println("item: " + item));
+  
+   // Supposons que getStockData retourne un Flux<StockData>
+   Flux<StockData> stockDataFlux = getStockData("GOOGLE");
+   ```
+
+* **`Mono<T>` :** Est également un `Publisher`mais spécialisé pour émettre **0 ou 1** élément. Il est utilisé pour représenter le résultat asynchrone d'une opération qui peut produire zéro ou un résultat, comme la récupération d'un seul enregistrement d'une table de base de données.
+
+    ```java
+    Mono<String> user = Mono.just("Reda Himmi");
+    user.subscribe(u -> System.out.println("User: " + u));
+
+    Mono<Void> op = Mono.empty().doOnTerminate(() -> System.out.println("Opération terminée."));
+    operationTerminee.subscribe();
+    ```
+
+En résumé, `Publisher` est l'interface, `Flux` est l'implémentation pour les séquences de **0 à n** éléments, et `Mono` est l'implémentation pour les séquences de **0 ou 1** élément.
+
+Remarque: **Il est aussi important de noter qu'un `Publisher` ne commence à émettre des éléments que lorsqu'un `Subscriber` s'y abonne via la méthode `subscribe()` ou `subscribe(Consumer<? super T> consumer)`**
 
 #### 5.2.2 Opérateurs essentiels
+
+1.  `just()`: Crée un `Flux` ou un `Mono` qui émet les éléments passés en paramètre, puis se complète. C'est un moyen simple de créer un Publisher statique.
+<figure>
+<img width="600" src="images/just.png" alt="just()" title="Processus">
+  <figcaption style="text-align: center;"><strong>just()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#just-T...-">Flux</a></figcaption>
+</figure>
+
+```java
+    Flux.just("Hello", "ILI");
+    Mono.just("Reda ILI");
+```
+
+2. `subscribe()`: Déclenche l'émission des éléments d'un Publisher en attachant un `Subscriber`. C'est l'opération qui active le flux. Elle correspond à l'appel de la méthode `subscribe(Subscriber s)` de l'interface Publisher.
+<figure>
+<img width="600" src="images/subscribe.png" alt="Subscribe()" title="Subscribe()">
+  <figcaption style="text-align: center;"><strong>Subscribe()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#subscribe--">Subscribe()</a></figcaption>
+</figure>
+
+```java
+    Flux.just("a", "b").subscribe(System.out::println);
+```
+
+3. `doOnNext(Consumer<? super T> onNext)` : permet d'exécuter un callback pour chaque élément émis par le `Publisher`, sans modifier l'élément lui-même.
+<figure>
+  <img width="600" src="images/do_on_next.png" alt="doOnNext()" title="doOnNext()">
+  <figcaption style="text-align: center;"><strong>doOnNext()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnNext-java.util.function.Consumer-">doOnNext()</a></figcaption>
+</figure>
+
+```java
+    Flux.just("Reda", "Himmi")
+        .doOnNext(item -> System.out.println("Processing: " + item))
+        .subscribe(System.out::println);
+```
+4. `map(Function<? super T, ? extends R> mapper)` : transforme chaque élément émis par le `Publisher` en appliquant une fonction synchrone.
+<figure>
+  <img width="600" src="images/map.png" alt="map()" title="map()">
+  <figcaption style="text-align: center;"><strong>map()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#map-java.util.function.Function-">map()</a></figcaption>
+</figure>
+
+```java
+    Flux.just("ili", "reda")
+        .map(String::toUpperCase)
+        .subscribe(System.out::println);
+```
+
+5. `filter(Predicate<? super T> predicate)` : émet uniquement les éléments qui satisfont un prédicat donné.
+<figure>
+  <img width="600" src="images/filter.png" alt="filter()" title="filter()">
+  <figcaption style="text-align: center;"><strong>filter()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#filter-java.util.function.Predicate-">filter()</a></figcaption>
+</figure>
+
+```java
+    Flux.range(1, 5)
+        .filter(n -> n % 2 == 0)
+        .subscribe(System.out::println);
+```
+
+6. `flatMap(Function<? super T, ? extends Publisher<? extends V>> mapper)` : transforme chaque élément en un `Publisher` et fusionne les flux résultants. L'ordre des éléments émis peut ne pas être conservé.
+<figure>
+  <img width="600" src="images/flatmap.png" alt="flatMap()" title="flatMap()">
+  <figcaption style="text-align: center;"><strong>flatMap()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#flatMap-java.util.function.Function-">flatMap()</a></figcaption>
+</figure>
+
+```java
+Flux.just(1, 2)
+    .flatMap(x -> Mono.just("value " + x))
+    .subscribe(System.out::println);
+```
+
+7. `concatMap(Function<? super T, ? extends Publisher<? extends V>> mapper)` : Similaire à `flatMap`, mais garantit que les éléments des `Publisher`s internes sont émis dans l'ordre du flux source.
+<figure>
+  <img width="600" src="images/concatmap.png" alt="concatMap()" title="concatMap()">
+  <figcaption style="text-align: center;"><strong>concatMap()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concatMap-java.util.function.Function-">concatMap()</a></figcaption>
+</figure>
+
+```java
+Flux.just(1, 2)
+    .concatMap(x -> Mono.just("value " + x).delayElement(java.time.Duration.ofMillis(100 * x)))
+    .subscribe(System.out::println);  // va afficher: "value: 1" puis "value: 2"
+```
+
+8. `delayElements(Duration period)` : introduit un délai entre l'émission de chaque élément.
+<figure>
+  <img width="600" src="images/delayelements.png" alt="delayElements()" title="delayElements()">
+  <figcaption style="text-align: center;"><strong>delayElements()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#delayElements-java.time.Duration-">delayElements()</a></figcaption>
+</figure>
+
+```java
+    Flux.just("one", "two").delayElements(java.time.Duration.ofSeconds(1)).subscribe(System.out::println);
+```
+
+9. `take(long n)` : émet seulement les n premiers éléments, puis se complète.
+<figure>
+  <img width="600" src="images/take.png" alt="take()" title="take()">
+  <figcaption style="text-align: center;"><strong>take()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#take-long-">take()</a></figcaption>
+</figure>
+
+```java
+    Flux.range(1, 10).take(3).subscribe(System.out::println);
+```
+
+10. `interval(Duration period)` : crée un Flux qui émet des Longs à intervalles réguliers.
+<figure>
+  <img width="600" src="images/interval.png" alt="interval()" title="interval()">
+  <figcaption style="text-align: center;"><strong>interval()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#interval-java.time.Duration-">interval()</a></figcaption>
+</figure>
+
+```java
+    Flux.interval(java.time.Duration.ofMillis(300)).take(5).subscribe(System.out::println);
+    // Output: 0, 1, 2, 3, 4 (émis avec un délai de 300ms entre chaque élément)
+```
+
+11. `zipWith(Publisher<? extends T2> source2)` : combine les éléments de ce Flux (ou Mono) avec ceux d'un autre Publisher, en émettant une nouvelle valeur contenant les deux éléments sous forme de Tuple2.
+<figure>
+  <img width="600" src="images/zipWith.png" alt="zipWith()" title="zipWith()">
+  <figcaption style="text-align: center;"><strong>zipWith()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#zipWith-org.reactivestreams.Publisher-">zipWith()</a></figcaption>
+</figure>
+
+```java
+    Flux<String> letters = Flux.just("a", "b", "c");
+    Flux<Integer> numbers = Flux.just(1, 2, 3);
+
+    letters.zipWith(numbers)
+           .subscribe(tuple -> System.out.println("Tuple: " + tuple));
+        // Output: Tuple2{t1=a, t2=1}
+        //         Tuple2{t1=b, t2=2}
+        //         Tuple2{t1=c, t2=3}
+
+    // Avec une fonction de combinaison :
+    letters.zipWith(numbers, (l, n) -> l + n)
+           .subscribe(System.out::println);
+        // Output: a1
+        //         b2
+        //         c3
+```
+
+12. `doOnSubscribe(Consumer<? super Subscription> onSubscribe)` : Permet d'exécuter une action lorsque la souscription a lieu. La `Subscription` est l'objet retourné au `Subscriber` lors de l'appel à `onSubscribe` (de l'interface `Subscriber`).
+<figure>
+  <img width="600" src="images/doonsubscribe.png" alt="doOnSubscribe()" title="doOnSubscribe()">
+  <figcaption style="text-align: center;"><strong>doOnSubscribe()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html#doOnSubscribe-java.util.function.Consumer-">doOnSubscribe()</a></figcaption>
+</figure>
+
+```java
+    Flux.just("start").doOnSubscribe(sub -> System.out.println("Subscribed!")).subscribe(System.out::println);
+```
+
+13. `doOnComplete(Runnable onComplete)` : Permet d'exécuter une action lorsque le `Publisher` se complète avec succès (appel de `onComplete()` du `Subscriber`).
+<figure>
+  <img width="600" src="images/dooncomplete.png" alt="doOnComplete()" title="doOnComplete()">
+  <figcaption style="text-align: center;"><strong>doOnComplete()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnComplete-java.lang.Runnable-">doOnComplete()</a></figcaption>
+</figure>
+
+```java
+    Mono.just("done").doOnComplete(() -> System.out.println("Mono completed")).subscribe(System.out::println);
+```
+
+14. `doOnError(Consumer<? super Throwable> onError)` : Permet d'exécuter une action lorsqu'une erreur se produit (appel de `onError(Throwable t)` du `Subscriber`).
+<figure>
+  <img width="600" src="images/doonerror.png.png" alt="doOnError()" title="doOnError()">
+  <figcaption style="text-align: center;"><strong>doOnError()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnError-java.util.function.Consumer-">doOnError()</a></figcaption>
+</figure>
+
+```java
+    Flux.error(new RuntimeException("Something went wrong")).doOnError(e -> System.err.println("Error caught!")).subscribe(null, System.err::println);
+```
 
 #### 5.3.3 Schedulers.boundedElastic & parallel, subscribeOn , publishOn
 
@@ -219,8 +410,4 @@ public void subscribe(Subscriber<? super T> s);
 
 ### 8.4 Intégration Kafka
 
-## 9. Spring WebFlux vs Spring MVC
-
-### 9.1 Comparaison des performances
-
-## 12. Références
+## 9. Références
