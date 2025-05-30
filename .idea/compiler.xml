@@ -28,6 +28,7 @@
     <bytecodeTargetLevel>
       <module name="reactive-programming-poc" target="19" />
       <module name="reactor-poc" target="21" />
+      <module name="user-service" target="21" />
     </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
