@@ -1,7 +1,39 @@
 # Programmation Réactive en Java & SpringBoot
 
 ## Sommaire
-
+1.  [Introduction](#1-introduction)
+2.  [Threads & Processus](#2-threads-processus)
+    * [Processus](#21-processus)
+    * [Threads](#22-threads)
+        * [Modèles du threading](#221-modèles-du-threading)
+3.  [Modèle traditionnel vs Modèle réactif](#3-modèle-traditionnel-vs-modèle-réactif)
+    * [Architecture et limites du modèle traditionnel (servlet)](#31-architecture-et-limites-du-modèle-traditionnel-servlet)
+    * [Principes du modèle réactif](#32-principes-du-modèle-réactif)
+4.  [Fondamentaux de la programmation réactive](#4-fondamentaux-de-la-programmation-réactive)
+    * [Reactive Manifesto](#41-reactive-manifesto)
+    * [L'initiative Reactive Streams vs. JDK9](#42-linitiative-reactive-streams-vs-jdk9)
+    * [Concepts clés (Back pressure, Event-loop, Non-blocking I/O)](#43-concepts-clés-back-pressure-event-loop-non-blocking-io)
+        * [Back pressure](#431-back-pressure)
+        * [Event-loop](#432-event-loop)
+        * [Non-blocking IO](#433-non-blocking-io)
+5.  [Implémentations Java de la programmation réactive](#5-implémentations-java-de-la-programmation-réactive)
+    * [Project Reactor en détail](#51-project-reactor-en-détail)
+        * [Reactor Core (Flux vs Mono vs Publisher)](#511-reactor-core-flux-vs-mono-vs-publisher)
+        * [Opérateurs essentiels](#522-opérateurs-essentiels)
+        * [Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn](#533-schedulersboundedelastic-schedulersparallel-subscribeon--publishon)
+6.  [Spring WebFlux](#6-spring-webflux)
+    * [Architecture et principes](#61-architecture-et-principes)
+    * [Cycle de vie d'une requête dans Spring WebFlux](#62-cycle-de-vie-dune-requete-dans-spring-webflux)
+7.  [Persistance réactive avec R2DBC, Reactor Kafka, WebClient](#7-persistance-réactive-avec-r2dbc-reactor-kafka-webclient)
+    * [Principes de R2DBC](#71-principes-de-r2dbc)
+    * [Intégration avec Spring Data R2DBC](#72-intégration-avec-spring-data-r2dbc)
+    * [Reactor Kafka](#73-reactor-kafka)
+    * [Intégration avec Spring Kafka](#74-intégration-avec-spring-kafka)
+8.  [POC pratique](#8-poc-pratique)
+    * [Pré-requis](#81-pré-requis)
+    * [Lancement du POC](#82-lancement-du-poc)
+    * [Architecture de l'application](#82-architecture-de-lapplication)
+9.  [Références](#9-références)
 ## 1. Introduction
 
 Depuis plusieurs années, le développement web en Java repose sur les servlets, un modèle synchrone et bloquant (modèle thread/request). Cependant, ce modèle devient rapidement inefficace dans les applications modernes et les
@@ -441,23 +473,232 @@ Cette approche permet à **Spring WebFlux** de gérer un grand nombre de requêt
 Pour qu'une application soit véritablement réactive, il faut que l'ensemble du processus le soit : depuis l'interaction de l'utilisateur avec le serveur jusqu'à l'enregistrement des données sur la base de données et la communication avec d'autres services tels que Kafka. C'est pourquoi des outils réactifs ont été créés, comme R2DBC pour les bases de données et Reactor Kafka (ou Spring Kafka Reactive) pour la messagerie. Ils sont conçus pour fonctionner parfaitement avec des outils réactifs comme Spring WebFlux et Project Reactor, en gardant notre application réactive de bout en bout (end-to-end).
 
 ### 7.1 Principes de R2DBC
-[R2DBC](https://r2dbc.io/) (Reactive Relational Database Connectivity) est une spécification pour l'accès réactif et non bloquant aux bases de données relationnelles sous la JVM. Son objectif principal est de surmonter les limitations de JDBC dans les environnements réactifs en offrant une API asynchrone et non bloquante. Lorsque l'on travaille avec PostgreSQL dans un contexte réactif avec Spring WebFlux, R2DBC est le choix privilégié pour maintenir la réactivité de bout en bout.
+[R2DBC](https://r2dbc.io/) (Reactive Relational Database Connectivity) est une spécification pour l'accès réactif et non bloquant aux bases de données relationnelles sous la JVM. Son objectif principal est de surmonter les limitations de JDBC dans les environnements réactifs en offrant une API asynchrone et non bloquante.  Lorsque l'on travaille avec PostgreSQL dans un contexte réactif avec Spring WebFlux, l'implémentation de R2DBC pour PostgreSQL, fournie par le projet `io.r2dbc:r2dbc-postgresql`, est le choix privilégié pour maintenir la réactivité de bout en bout.
 
 ### 7.2 Intégration avec Spring Data R2DBC
+**[Spring Data R2DBC](https://spring.io/projects/spring-data-r2dbc)** simplifie considérablement l'interaction réactive avec **PostgreSQL** (ou d'autres bases de données relationnelles supportées) dans une application **Spring WebFlux**. Il fournit une couche d'abstraction au-dessus de l'API **R2DBC** native.
+
+* Exemple de Code (Spring Data R2DBC avec PostgreSQL) :
+
+```java
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
+
+@Table("users")
+public class User {
+    @Id
+    private Integer id;
+    private String name;
+    private Integer age;
+
+    // Constructeurs, getters et setters
+}
+```
+
+```java
+import org.springframework.data.r2dbc.repository.ReactiveCrudRepository;
+import org.springframework.data.r2dbc.repository.Query;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+public interface UserRepository extends ReactiveCrudRepository<User, Integer> {
+    Mono<User> findByName(String name);
+    Flux<User> findByAgeGreaterThan(int age);
+
+    @Query("SELECT * FROM users WHERE name LIKE $1")
+    Flux<User> findByNameLike(String pattern);
+}
+```
+
+```java
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    public Mono<User> getUserByName(String name) {
+        return userRepository.findByName(name);
+    }
+
+    public Flux<User> getAdultUsers() {
+        return userRepository.findByAgeGreaterThan(17);
+    }
+
+    public Flux<User> searchUsersByName(String query) {
+        return userRepository.findByNameLike("%" + query + "%");
+    }
+
+    public Mono<User> createUser(User user) {
+        return userRepository.save(user);
+    }
+
+    public Mono<Void> deleteUser(Integer id) {
+        return userRepository.deleteById(id);
+    }
+
+    public Flux<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+}
+```
 
 ### 7.3 Reactor Kafka
+[Reactor Kafka](https://projectreactor.io/docs/kafka/release/reference/) est une librairie réactive qui permet d'intégrer [Apache Kafka](https://kafka.apache.org/) dans des applications basées sur Project Reactor. Elle offre une api non bloquante et basée sur **Reactive Streams** pour interagir avec Kafka, tant pour la production que pour la consommation de messages. Dans une application Spring WebFlux.
 
 ### 7.4 Intégration avec Spring Kafka
+**Spring Kafka Reactive** est un projet qui fait part de l'écosystème **[Spring Kafka](https://docs.spring.io/spring-kafka/reference/)** qui fournit une API réactive pour interagir avec Apache Kafka en utilisant Project Reactor. Il offre une d'abstraction de **Reactor Kafka**.
 
+**Exemple de Code (Consommation avec ReactiveKafkaConsumerTemplate) :**
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.reactive.ReactiveKafkaConsumerTemplate;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.listener.ReactiveMessageListenerContainer;
+import org.springframework.kafka.listener.ContainerProperties;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import java.util.HashMap;
+import java.util.Map;
+import reactor.core.publisher.Flux;
+
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Bean
+    public Map<String, Object> consumerConfigs() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG, "my-spring-reactive-group");
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        return props;
+    }
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        return new DefaultKafkaConsumerFactory<>(consumerConfigs());
+    }
+
+    @Bean
+    public ReactiveKafkaConsumerTemplate<String, String> reactiveKafkaConsumerTemplate(ConsumerFactory<String, String> consumerFactory) {
+        return new ReactiveKafkaConsumerTemplate<>(consumerFactory);
+    }
+
+    @Bean
+    public Flux<String> kafkaConsumerFlux(ReactiveKafkaConsumerTemplate<String, String> reactiveKafkaConsumerTemplate) {
+        return reactiveKafkaConsumerTemplate
+                .receiveAutoAck()
+                .map(consumerRecord -> consumerRecord.value())
+                .doOnNext(message -> System.out.println("Received message: " + message));
+    }
+}
+```
+
+**Exemple de Code (Production avec ReactiveKafkaProducerTemplate) :**
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+import java.util.HashMap;
+import java.util.Map;
+import reactor.core.publisher.Mono;
+import org.apache.kafka.clients.producer.ProducerRecord;
+
+@Configuration
+public class KafkaProducerConfig {
+
+    @Bean
+    public Map<String, Object> producerConfigs() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        return props;
+    }
+
+    @Bean
+    public ProducerFactory<String, String> producerFactory() {
+        return new DefaultKafkaProducerFactory<>(producerConfigs());
+    }
+
+    @Bean
+    public ReactiveKafkaProducerTemplate<String, String> reactiveKafkaProducerTemplate(ProducerFactory<String, String> producerFactory) {
+        return new ReactiveKafkaProducerTemplate<>(producerFactory);
+    }
+
+    public Mono<Void> sendMessage(ReactiveKafkaProducerTemplate<String, String> reactiveKafkaProducerTemplate, String topic, String key, String payload) {
+        return reactiveKafkaProducerTemplate
+                .send(new ProducerRecord<>(topic, key, payload))
+                .doOnSuccess(senderResult -> System.out.println("Sent message with offset: " + senderResult.recordMetadata().offset()))
+                .then();
+    }
+}
+```
 
 ## 8. POC pratique
+### 8.1 Pré-requis
+1. Java 21 & Maven
+2. Docker & Docker Compose
 
-### 8.1 Architecture de l'application
+### 8.2 Lancement du POC
+```bash
+cd spring-webflux-poc
+docker compose up -d
+cd common
+mvn compile
+mvn schema-registry:register
+cd ../auth-service
+mvn spring-boot:run
+cd ../ride-service
+mvn spring-boot:run
+cd ../driver-service
+mvn spring-boot:run
+```
 
-### 8.2 API réactive avec Spring WebFlux
+### 8.2 Architecture de l'application
 
-### 8.3 Persistance avec R2DBC PostgreSQL
-
-### 8.4 Intégration Kafka
 
 ## 9. Références
+* [Project Reactor](https://projectreactor.io)
+* [Spring WebFlux](https://docs.spring.io/spring-framework/reference/web/webflux.html)
+* [linux-thread](https://www.scaler.com/topics/linux-thread/)
+* [ult-and-klt](https://www.scaler.com/topics/user-level-threads-and-kernel-level-threads/)
+* [Types of thread models](https://www.researchgate.net/figure/Three-types-of-thread-models-Popular-operating-systems-5-22-24-adopt-the_fig1_346379550)
+* [Webflux vs Thread per request model](https://singhkaushal.medium.com/spring-webflux-eventloop-vs-thread-per-request-model-a42d07ee8502)
+* [Concurrency in Spring WebFlux](https://www.baeldung.com/spring-webflux-concurrency)
+* [Reactive Manifesto](https://www.reactivemanifesto.org/fr)
+* [Flux (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#just-T...-)
+* [Subscribe() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#subscribe--)
+* [doOnNext() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnNext-java.util.function.Consumer-)
+* [map() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#map-java.util.function.Function-)
+* [filter() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#filter-java.util.function.Predicate-)
+* [flatMap() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#flatMap-java.util.function.Function-)
+* [concatMap() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#concatMap-java.util.function.Function-)
+* [delayElements() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#delayElements-java.time.Duration-)
+* [take() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#take-long-)
+* [interval() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#interval-java.time.Duration-)
+* [zipWith() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#zipWith-org.reactivestreams.Publisher-)
+* [doOnSubscribe() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html#doOnSubscribe-java.util.function.Consumer-)
+* [doOnComplete() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnComplete-java.lang.Runnable-)
+* [doOnError() (Project Reactor)](https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnError-java.util.function.Consumer-)
+* [R2DBC](https://r2dbc.io/)
+* [Spring Data R2DBC](https://spring.io/projects/spring-data-r2dbc)
+* [Reactor Kafka](https://projectreactor.io/docs/kafka/release/reference/)
+* [Apache Kafka](https://kafka.apache.org/)
+* [Spring Kafka](https://docs.spring.io/spring-kafka/reference/)
