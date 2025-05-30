@@ -375,7 +375,7 @@ Flux.just(1, 2)
 
 14. `doOnError(Consumer<? super Throwable> onError)` : Permet d'exécuter une action lorsqu'une erreur se produit (appel de `onError(Throwable t)` du `Subscriber`).
 <figure>
-  <img width="600" src="images/doonerror.png.png" alt="doOnError()" title="doOnError()">
+  <img width="600" src="images/doonerror.png" alt="doOnError()" title="doOnError()">
   <figcaption style="text-align: center;"><strong>doOnError()</strong> - source: <a href="https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html#doOnError-java.util.function.Consumer-">doOnError()</a></figcaption>
 </figure>
 
@@ -383,20 +383,72 @@ Flux.just(1, 2)
     Flux.error(new RuntimeException("Something went wrong")).doOnError(e -> System.err.println("Error caught!")).subscribe(null, System.err::println);
 ```
 
-#### 5.3.3 Schedulers.boundedElastic & parallel, subscribeOn , publishOn
+#### 5.3.3 Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn
 
-#### 5.2.4 Reactor Kafka
+Dans **Reactor**, les **Schedulers** sont essentiels pour gérer l'exécution asynchrone et éviter les blocages des threads. Ils définissent sur quels threads les opérations des flux réactifs vont s'exécuter.
+
+* **`Schedulers.boundedElastic()`** : pour les opérations potentiellement bloquantes (comme lire un fichier ou appeler une API synchrone bloquante). Il crée un pool de threads élastique avec une limite.
+
+* **`Schedulers.parallel()`** : Optimisé pour les tâches non bloquantes et gourmandes en CPU (**CPU intensive tasks**) qui peuvent s'exécuter en parallèle efficacement (comme des calculs intensifs). Il utilise un nombre fixe de threads.
+
+Pour utiliser ces schedulers, **Reactor** fournit deux opérateurs clés **`subscribeOn(Scheduler s)`** et **`publishOn(Scheduler s)`**
+
+* `subscribeOn(Scheduler s)` : Indique sur quel `Scheduler` l'ensemble du flux s'exécutera, à partir de la source. Un seul subscribeOn a un effet.
+```java
+    Mono.fromCallable(() -> "Blocking Task")
+        .subscribeOn(Schedulers.boundedElastic()) // L'exécution de la tâche se fera sur un thread boundedElastic
+        .map(String::toUpperCase)
+        .subscribe(result -> System.out.println("Résultat sur: " + Thread.currentThread().getName() + ", " + result));
+```
+
+* `publishOn(Scheduler s)` : indique sur quel `Scheduler` les opérations suivantes dans le flux s'exécuteront. On peut l'utiliser plusieurs fois pour changer le contexte d'exécution à différents points.
+```java
+    Flux.range(1, 3)
+        .map(i -> "Traitement 1 sur: " + Thread.currentThread().getName())
+        .publishOn(Schedulers.parallel()) // Le traitement suivant se fera sur un thread parallel
+        .map(s -> "Traitement 2 sur: " + Thread.currentThread().getName() + ", " + s.toUpperCase())
+        .subscribe(System.out::println);
+```
+
 
 ## 6. Spring WebFlux
+[Spring WebFlux](https://docs.spring.io/spring-framework/reference/web/webflux.html) est le framework web réactif non bloquant de Spring. **Basé sur Project Reactor**, il permet de construire des applications web réactives et évolutives en tirant parti des principes de la programmation réactive et de l'API Reactive Streams. Contrairement à Spring MVC, qui repose sur un modèle de servlet bloquant, WebFlux est asynchrone et non bloquant par nature.
 
 ### 6.1 Architecture et principes
+Spring WebFlux, par sa conception réactive, influence profondément son modèle de threading et le cycle de vie des requêtes. Étant donné que le starter Spring Boot WebFlux inclut Netty comme serveur embarqué par défaut, notre exploration de l'architecture et du modèle de threading se focalisera sur cette implémentation.
 
+#### 6.2 Cycle de vie d'une requête dans Spring WebFlux
+<figure>
+  <img width="600" src="images/spring_webflux_threading_model.png" alt="Spring Webflux Threading Model" title="Spring Webflux Threading Model">
+  <figcaption style="text-align: center;"><strong>Spring Webflux Threading Model</strong> - source: <a href="https://singhkaushal.medium.com/spring-webflux-eventloop-vs-thread-per-request-model-a42d07ee8502/">Spring Webflux</a></figcaption>
+</figure>
 
-## 7. Persistance réactive avec R2DBC
+Un **EventLoop** est un **thread** unique et non bloquant, géré par **Netty**, qui constitue le modèle de **non-blocking IO** utilisé par **Spring WebFlux**. Au lieu d'attendre passivement les opérations I/O, il surveille en permanence plusieurs canaux de socket (**SocketChannels**) à la recherche d'événements. Lorsqu'un événement se produit, l'**EventLoop** délègue le traitement à un handler dans le pipeline de canaux. Cette approche permet à un petit nombre de threads de gérer efficacement un grand nombre de connexions. Il est crucial de ne pas bloquer l'**EventLoop** pour maintenir la réactivité du serveur.
+
+Cycle de vie d'une requête dans Spring WebFlux:
+
+1. **Request -> Socket Channel** : une requête HTTP est reçue par un **Socket Channel** géré par Netty.
+2. **Inbound Channel Handler -> EventLoop (Netty thread)** : La requête traverse le **Inbound Channel Handler** et est transmise au thread **EventLoop** de Netty.
+3. **EventLoop -> Scheduler/Worker Thread** : Si une opération bloquante est nécessaire, le traitement est délégué à un **Scheduler** (ex: `Schedulers.boundedElastic()`) qui utilise un pool de **Worker Threads**. Pour les opérations non bloquantes, le traitement peut continuer sur l'EventLoop.
+4. **Scheduler/Worker Thread -> Spring WebFlux Controller/Service** : Le **Worker Thread** exécute le code potentiellement bloquant.
+5. **Scheduler/Worker Thread -> ScheduledTaskQueue** : Une fois l'opération bloquante terminée et le résultat prêt à être envoyé, le Worker Thread place une tâche contenant la réponse dans la `ScheduledTaskQueue`.
+6. **EventLoop -> ScheduledTaskQueue** : L'**EventLoop** interroge la `ScheduledTaskQueue` pour les tâches terminées.
+7. **EventLoop -> Outbound Channel Handler -> Socket Channel -> Response** : L'**EventLoop** récupère la tâche de réponse de la `ScheduledTaskQueue`, la traite via le **Outbound Channel Handler** et l'envoie de manière non bloquante au client via le **Socket Channel**.
+
+Cette approche permet à **Spring WebFlux** de gérer un grand nombre de requêtes simultanées avec un nombre limité de threads.
+
+## 7. Persistance réactive avec R2DBC , Reactor Kafka, WebClient 
+Pour qu'une application soit véritablement réactive, il faut que l'ensemble du processus le soit : depuis l'interaction de l'utilisateur avec le serveur jusqu'à l'enregistrement des données sur la base de données et la communication avec d'autres services tels que Kafka. C'est pourquoi des outils réactifs ont été créés, comme R2DBC pour les bases de données et Reactor Kafka (ou Spring Kafka Reactive) pour la messagerie. Ils sont conçus pour fonctionner parfaitement avec des outils réactifs comme Spring WebFlux et Project Reactor, en gardant notre application réactive de bout en bout (end-to-end).
 
 ### 7.1 Principes de R2DBC
+[R2DBC](https://r2dbc.io/) (Reactive Relational Database Connectivity) est une spécification pour l'accès réactif et non bloquant aux bases de données relationnelles sous la JVM. Son objectif principal est de surmonter les limitations de JDBC dans les environnements réactifs en offrant une API asynchrone et non bloquante. Lorsque l'on travaille avec PostgreSQL dans un contexte réactif avec Spring WebFlux, R2DBC est le choix privilégié pour maintenir la réactivité de bout en bout.
 
-### 7.2 Intégration avec Spring Data
+### 7.2 Intégration avec Spring Data R2DBC
+
+### 7.3 Reactor Kafka
+
+### 7.4 Intégration avec Spring Kafka
+
 
 ## 8. POC pratique
 
