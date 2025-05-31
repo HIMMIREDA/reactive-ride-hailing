@@ -35,6 +35,7 @@
     * [Lancement du POC](#82-lancement-du-poc)
     * [Technologies utilisées](#83-technologies-utilisées)
     * [Fonctionnalités](#84-fonctionnalités)
+    * [Documentation des Endpoints API](#85-documentation-des-endpoints-api)
 9.  [Références](#9-références)
 
 ## 1. Introduction
@@ -148,11 +149,11 @@ Spring Webflux).
 4. **Message driven**: utilise le passage de messages
    asynchrones entre ses composants afin de garantir leur couplage
    faible, leur isolation, la transparence de localisation ainsi que la
-   délégation d’erreurs à d’autres composants
+   délégation d'erreurs à d'autres composants
 
 ### 4.2 L'initiative Reactive Streams vs. JDK9
 
-[Reactive Streams](https://www.reactive-streams.org/) est une spécification pour le traitement asynchrone des flux de données, principalement destinée à l'écosystème Java. Elle a été adoptée par plusieurs bibliothèques de programmation réactive telles que RxJava 2 et Reactor. Avec l’arrivée de Java 9, les interfaces de cette spécification (`Publisher`, `Subscriber`, `Subscription`, `Processor`) ont été intégrées directement dans le JDK via le package `java.util.concurrent.Flow`, tout en conservant la même sémantique.
+[Reactive Streams](https://www.reactive-streams.org/) est une spécification pour le traitement asynchrone des flux de données, principalement destinée à l'écosystème Java. Elle a été adoptée par plusieurs bibliothèques de programmation réactive telles que RxJava 2 et Reactor. Avec l'arrivée de Java 9, les interfaces de cette spécification (`Publisher`, `Subscriber`, `Subscription`, `Processor`) ont été intégrées directement dans le JDK via le package `java.util.concurrent.Flow`, tout en conservant la même sémantique.
 
 **Toutefois, la majorité des bibliothèques ont décidé de rester sur `Reactive Streams` pour garantir une compatibilité avec Java 8.**
 
@@ -726,6 +727,95 @@ L'application est découpée en trois **micro-services** qui se trouvent derriè
 * Quand le client (`USER`) crée une demande de course, il envoie une requête à `ride-service` (`/api/rides`). La demande de course est stockée dans la table **PostgreSQL** `ride_requests` avec le statut `REQUESTED`. Ensuite, celle-ci est publiée sur un **topic Kafka** (`poc-ride-request-requested-v1`) et consommée par `driver-service`, qui la stocke dans une collection **MongoDB** `ride_requests`. En temps réel, la requête est affichée aux conducteurs qui se situent près du client.
 * Les conducteurs (`DRIVER`) proposent des courses pour cette demande avec des prix, en utilisant l'endpoint `/api/rides/proposals` de `driver-service`. Cette proposition est stockée dans la collection **MongoDB** `ride_proposals` et publiée sur un **topic Kafka** (`poc-ride-request-proposed-v1`). Elle est ensuite consommée par `ride-service`, qui affiche cette proposition au client en temps réel.
 * Le client peut maintenant accepter une proposition en passant par l'endpoint `/api/rides/{rideRequestId}/accept` de `ride-service`. La demande de course passe alors au statut `ACCEPTED` et est publiée dans un **topic Kafka** (`poc-ride-request-accepted-v1`). Ce message est consommé par `driver-service`, qui confirme la réservation en mettant le statut de la demande de course à `BOOKED` et notifie `ride-service` que le conducteur est réservé en publiant un message sur le **topic Kafka** (`poc-ride-request-booked-v1`). Finalement, `ride-service` modifie le statut de la demande à `BOOKED`.
+
+### 8.5 Documentation des Endpoints API
+
+Cette section documente les principaux endpoints de l'API avec des exemples d'utilisation en curl.
+
+#### Authentification
+
+##### Inscription (USER ou DRIVER)
+```bash
+curl -X POST http://localhost:8085/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123",
+    "firstName": "John",
+    "lastName": "Doe",
+    "role": "USER",
+    "phoneNumber": "0612345678"
+  }'
+```
+
+##### Authentification
+```bash
+curl -X POST http://localhost:8085/api/users/auth \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123",
+    "role": "USER"
+  }'
+```
+
+#### Gestion des courses (USER)
+
+##### Créer une demande de course
+```bash
+curl -X POST http://localhost:8085/api/rides \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "startLng": 20.2,
+    "startLat": 33.2,
+    "endLng": 20.1,
+    "endLat": 50.1,
+    "seats": 2,
+    "preferredPrice": 12.22
+  }'
+```
+
+##### Accepter une proposition de course
+```bash
+curl -X PUT http://localhost:8085/api/rides/RIDE_REQUEST_ID/accept \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "rideProposalId": "PROPOSAL_ID"
+  }'
+```
+
+##### Obtenir les propositions de courses (SSE)
+```bash
+curl -N http://localhost:8085/api/rides/RIDE_REQUEST_ID/proposals/stream \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### Gestion des courses (DRIVER)
+
+##### Voir les demandes de courses à proximité (SSE)
+```bash
+curl -N "http://localhost:8085/api/rides/nearby/stream?lat=33.3&lng=20.2&radius=100" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+##### Proposer une course
+```bash
+curl -X POST http://localhost:8085/api/rides/proposals \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "rideRequestId": "RIDE_REQUEST_ID",
+    "price": 15.50
+  }'
+```
+
+**Notes:**
+- Remplacez `YOUR_JWT_TOKEN` par le token JWT obtenu lors de l'authentification
+- Les endpoints SSE (Server-Sent Events) maintiennent une connexion ouverte pour recevoir les mises à jour en temps réel
+- Tous les endpoints nécessitent une authentification via un token JWT valide
+- Les informations de l'utilisateur (ID, rôle, email, etc.) sont extraites du token JWT
 
 ## 9. Références
 * [Project Reactor](https://projectreactor.io)
