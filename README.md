@@ -2,7 +2,7 @@
 
 ## Sommaire
 1.  [Introduction](#1-introduction)
-2.  [Threads & Processus](#2-threads-processus)
+2.  [Threads & Processus](#2-threads--processus)
     * [Processus](#21-processus)
     * [Threads](#22-threads)
         * [Modèles du threading](#221-modèles-du-threading)
@@ -19,12 +19,12 @@
 5.  [Implémentations Java de la programmation réactive](#5-implémentations-java-de-la-programmation-réactive)
     * [Project Reactor en détail](#51-project-reactor-en-détail)
         * [Reactor Core (Flux vs Mono vs Publisher)](#511-reactor-core-flux-vs-mono-vs-publisher)
-        * [Opérateurs essentiels](#522-opérateurs-essentiels)
-        * [Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn](#533-schedulersboundedelastic-schedulersparallel-subscribeon--publishon)
+        * [Opérateurs essentiels](#512-opérateurs-essentiels)
+        * [Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn](#513-schedulersboundedelastic-schedulersparallel-subscribeon--publishon)
 6.  [Spring WebFlux](#6-spring-webflux)
     * [Architecture et principes](#61-architecture-et-principes)
-    * [Cycle de vie d'une requête dans Spring WebFlux](#62-cycle-de-vie-dune-requete-dans-spring-webflux)
-7.  [Persistance réactive avec R2DBC, Reactor Kafka, WebClient](#7-persistance-réactive-avec-r2dbc-reactor-kafka-webclient)
+    * [Cycle de vie d'une requête dans Spring WebFlux](#612-cycle-de-vie-dune-requete-dans-spring-webflux)
+7.  [Persistance réactive avec R2DBC, Reactor Kafka, WebClient](#7-persistance-réactive-avec-r2dbc--reactor-kafka-webclient-)
     * [Principes de R2DBC](#71-principes-de-r2dbc)
     * [Intégration avec Spring Data R2DBC](#72-intégration-avec-spring-data-r2dbc)
     * [Reactor Kafka](#73-reactor-kafka)
@@ -32,7 +32,8 @@
 8.  [POC pratique](#8-poc-pratique)
     * [Pré-requis](#81-pré-requis)
     * [Lancement du POC](#82-lancement-du-poc)
-    * [Fonctionnalités](#83-fonctionnalités)
+    * [Technologies utilisées](#83-technologies-utilisées)
+    * [Fonctionnalités](#84-fonctionnalités)
 9.  [Références](#9-références)
 
 ## 1. Introduction
