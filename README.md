@@ -36,6 +36,12 @@
     * [Technologies utilisées](#83-technologies-utilisées)
     * [Fonctionnalités](#84-fonctionnalités)
     * [Documentation des Endpoints API](#85-documentation-des-endpoints-api)
+    * [Exemples de code](#86-exemples-de-code)
+        * [Création d'une demande de course](#861-création-dune-demande-de-course-ride-service)
+        * [Recherche des courses à proximité](#862-recherche-des-courses-à-proximité-driver-service)
+        * [Proposition de course par un conducteur](#863-proposition-de-course-par-un-conducteur-driver-service)
+        * [Acceptation d'une proposition](#864-acceptation-dune-proposition-ride-service)
+        * [Consommation des événements Kafka](#865-consommation-des-événements-kafka-driver-service)
 9.  [Références](#9-références)
 
 ## 1. Introduction
@@ -816,6 +822,217 @@ curl -X POST http://localhost:8085/api/rides/proposals \
 - Les endpoints SSE (Server-Sent Events) maintiennent une connexion ouverte pour recevoir les mises à jour en temps réel
 - Tous les endpoints nécessitent une authentification via un token JWT valide
 - Les informations de l'utilisateur (ID, rôle, email, etc.) sont extraites du token JWT
+
+### 8.6 Exemples de code 
+
+Cette section présente les parties de code les plus importantes qui illustrent les fonctionnalités principales de l'application.
+
+#### 8.6.1 Création d'une demande de course (ride-service)
+
+```java
+@Service
+@RequiredArgsConstructor
+public class RideRequestServiceImpl implements RideRequestService {
+    @Transactional
+    @Override
+    public Mono<CreateRideRequestResponseDto> createRideRequest(CustomerInternalDto customerInternalDto, CreateRideRequestRequestDto requestDto) {
+        // 1. Création de l'entité de demande de course
+        RideRequestEntity rideRequestEntity = rideRequestMapper.mapToRideRequestEntity(requestDto);
+        rideRequestEntity.setCustomerId(customerInternalDto.getCustomerId());
+        rideRequestEntity.setStatus(RideRequestStatus.REQUESTED);
+
+        // 2. Sauvegarde dans PostgreSQL et publication d'un événement Kafka
+        return rideRequestRepository.save(rideRequestEntity)
+                .flatMap(rideRequest -> {
+                    // Création de l'événement Kafka
+                    RideRequestRequestedEvent event = RideRequestRequestedEvent.newBuilder()
+                            .setRideRequestId(rideRequest.getRideRequestId().toString())
+                            .setCustomerId(rideRequest.getCustomerId().toString())
+                            // ... autres champs ...
+                            .build();
+
+                    // Publication de l'événement
+                    return rideRequestRequestedProducerTemplate
+                            .send(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
+                            .thenReturn(rideRequest);
+                })
+                .map(rideRequestMapper::mapToCreateRideRequestResponseDto);
+    }
+}
+```
+
+#### 8.6.2 Recherche des courses à proximité (driver-service)
+
+```java
+@Service
+@RequiredArgsConstructor
+public class RideRequestServiceImpl implements RideRequestService {
+    @Override
+    public Flux<RideRequestEntity> getNearbyRideRequests(DriverInternalDto driverInternalDto, Double lat, Double lng, Integer radiusKm) {
+        // 1. Création du point de localisation du conducteur
+        GeoJsonPoint driverPoint = new GeoJsonPoint(lng, lat);
+        Distance distance = new Distance(radiusKm, Metrics.KILOMETERS);
+
+        // 2. Recherche des courses existantes dans le rayon
+        Flux<RideRequestEntity> nearRides = rideRequestRepository
+                .findByStatusAndStartLocationNear(RideRequestStatus.REQUESTED, driverPoint, distance);
+
+        // 3. Surveillance en temps réel des nouvelles courses
+        Flux<RideRequestEntity> liveNearbyRides = reactiveMongoTemplate
+                .changeStream(RideRequestEntity.class)
+                .watchCollection("ride_requests")
+                .filter(Criteria.where("status").is(RideRequestStatus.REQUESTED.toString()))
+                .listen()
+                .mapNotNull(ChangeStreamEvent::getBody)
+                .filter(ride -> isWithinRadius(driverPoint, ride.getStartLocation(), radiusKm));
+
+        // 4. Combinaison des deux flux
+        return Flux.concat(nearRides, liveNearbyRides);
+    }
+}
+```
+
+#### 8.6.3 Proposition de course par un conducteur (driver-service)
+
+```java
+@Service
+@RequiredArgsConstructor
+public class RideProposalServiceImpl implements RideProposalService {
+    @Transactional
+    @Override
+    public Mono<ProposeRideProposalResponseDto> proposeRideProposal(DriverInternalDto driverInternalDto, ProposeRideProposalRequestDto requestDto) {
+        // 1. Vérification de l'existence de la demande
+        return rideRequestRepository.findByRideRequestIdAndStatus(requestDto.getRideRequestId(), RideRequestStatus.REQUESTED)
+                .switchIfEmpty(Mono.error(new RideRequestNotFoundException("Ride not found")))
+                .flatMap(rideRequest -> {
+                    // 2. Création de la proposition
+                    RideProposalEntity proposal = rideProposalMapper.mapToRideProposalEntity(requestDto);
+                    proposal.setDriverId(driverInternalDto.getDriverId().toString());
+                    proposal.setDriverEmail(driverInternalDto.getDriverEmail());
+                    // ... autres champs du conducteur ...
+                    return rideProposalRepository.save(proposal);
+                })
+                .flatMap(proposal -> {
+                    // 3. Publication de l'événement Kafka
+                    RideProposalProposedEvent event = RideProposalProposedEvent.newBuilder()
+                            .setRideProposalId(proposal.getRideProposalId())
+                            .setRideRequestId(proposal.getRideRequestId())
+                            .setPrice(proposal.getPrice())
+                            // ... autres champs ...
+                            .build();
+                    return rideProposalProposedEventProducer
+                            .send(rideProposalProposedTopicName, proposal.getRideProposalId(), event)
+                            .thenReturn(proposal);
+                })
+                .map(rideProposalMapper::mapToProposeRideProposalResponseDto);
+    }
+}
+```
+
+#### 8.6.4 Acceptation d'une proposition (ride-service)
+
+```java
+@Service
+@RequiredArgsConstructor
+public class RideRequestServiceImpl implements RideRequestService {
+    @Transactional
+    @Override
+    public Mono<AcceptRideProposalResponseDto> acceptRideProposal(CustomerInternalDto customerInternalDto, UUID rideRequestId, AcceptRideProposalRequestDto requestDto) {
+        // 1. Recherche et validation de la demande
+        return rideRequestRepository.findByRideRequestIdAndCustomerId(rideRequestId, customerInternalDto.getCustomerId())
+                .switchIfEmpty(Mono.error(new RideRequestNotFoundException("Ride Request not found")))
+                .<RideRequestEntity>handle((rideRequest, sink) -> {
+                    if (rideRequest.getStatus() == RideRequestStatus.REQUESTED) {
+                        rideRequest.setStatus(RideRequestStatus.ACCEPTED);
+                        sink.next(rideRequest);
+                        return;
+                    }
+                    sink.error(new RideRequestNotFoundException("Ride Request is not in REQUESTED status"));
+                })
+                // 3. Sauvegarde et publication de l'événement
+                .flatMap(rideRequestRepository::save)
+                .flatMap(rideRequest -> {
+                    RideProposalAcceptedEvent event = RideProposalAcceptedEvent.newBuilder()
+                            .setRideRequestId(rideRequest.getRideRequestId().toString())
+                            .setRideProposalId(requestDto.getRideProposalId().toString())
+                            .build();
+                    return rideProposalAcceptedProducerTemplate
+                            .send(rideProposalAcceptedTopicName, rideRequest.getRideRequestId().toString(), event)
+                            .thenReturn(rideRequest);
+                })
+                .map(rideRequestMapper::mapToAcceptRideProposalResponseDto);
+    }
+}
+```
+
+#### 8.6.5 Consommation des événements Kafka (driver-service)
+
+```java
+@Component
+@RequiredArgsConstructor
+public class RideProposalAcceptedEventConsumer {
+    private final KafkaFluxRegistry kafkaFluxRegistry;
+    private final RideRequestRepository rideRequestRepository;
+    private final RideProposalRepository rideProposalRepository;
+    private final ReactiveKafkaProducerTemplate<String, RideProposalBookedEvent> rideProposalBookedEventProducer;
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void startKafkaConsumer() {
+        // 1. Récupération du flux Kafka et connexion automatique
+        kafkaFluxRegistry.getFlux(rideProposalAcceptedTopic)
+                .autoConnect()
+                .flatMap(record -> {
+                    // 2. Extraction des IDs de la demande et de la proposition
+                    RideProposalAcceptedEvent event = (RideProposalAcceptedEvent) record.value();
+                    String rideRequestId = event.getRideRequestId().toString();
+                    String rideProposalId = event.getRideProposalId().toString();
+
+                    // 3. Recherche de la demande et de la proposition dans MongoDB
+                    return Mono.zip(
+                            rideRequestRepository.findById(rideRequestId),
+                            rideProposalRepository.findById(rideProposalId)
+                    )
+                    .switchIfEmpty(Mono.empty())
+                    .flatMap(tuple -> {
+                        RideRequestEntity rideRequest = tuple.getT1();
+                        RideProposalEntity rideProposal = tuple.getT2();
+
+                        // 4. Mise à jour du statut de la demande
+                        rideRequest.setStatus(RideRequestStatus.BOOKED);
+                        rideRequest.setAcceptedRideProposalId(rideProposal.getRideProposalId());
+
+                        // 5. Sauvegarde et publication d'un nouvel événement
+                        return rideRequestRepository.save(rideRequest)
+                                .doOnSuccess(__ -> record.receiverOffset().acknowledge())
+                                .flatMap(__ -> {
+                                    // 6. Publication de l'événement de réservation
+                                    RideProposalBookedEvent bookedEvent = buildBookedEvent(rideRequest, rideProposal);
+                                    return rideProposalBookedEventProducer
+                                            .send(rideProposalBookedTopic, rideProposal.getRideProposalId(), bookedEvent)
+                                            .then();
+                                });
+                    });
+                })
+                .subscribe();
+    }
+}
+```
+
+Ces exemples de code illustrent l'implémentation des principales fonctionnalités de notre POC, en utilisant la programmation réactive avec Spring WebFlux et Reactor :
+
+* Utilisation de Mono et Flux pour les opérations asynchrones
+
+* Chaînage des opérations avec flatMap et map
+
+* Gestion des erreurs avec switchIfEmpty et handle
+
+* Transactions réactives avec l'annotation @Transactional
+
+* Intégration avec Kafka pour la communication entre services
+
+* Utilisation de MongoDB pour la géolocalisation et le streaming en temps réel
+
+
 
 ## 9. Références
 * [Project Reactor](https://projectreactor.io)
