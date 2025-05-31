@@ -727,6 +727,7 @@ L'application est découpée en trois **micro-services** qui se trouvent derriè
 * **ride-service** : Ce micro-service permet de créer des demandes de courses, de voir les propositions des conducteurs et d'accepter une proposition. Il utilise **PostgreSQL** comme base de données.
 * **driver-service** : Ce micro-service permet de voir les demandes de courses près du conducteur et de proposer des courses. Il utilise **MongoDB** comme base de données.
 * **api-gateway** : Point d'entrée de notre POC, elle redirige les requêtes vers le bon micro-service et gère l'autorisation.
+* **common** : un module partagée entre les micro-services, contenant les messages Kafka et les schémas Avro. 
 
 -----
 
