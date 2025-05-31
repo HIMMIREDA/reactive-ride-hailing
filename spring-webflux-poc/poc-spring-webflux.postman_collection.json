@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "5f3e711e-4fd6-483e-9be5-e2cb49da3b61",
+		"_postman_id": "a9e8ecdb-6248-4a2c-9749-a2cf8034e127",
 		"name": "poc-spring-webflux",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "20859692"
+		"_exporter_id": "29944646"
 	},
 	"item": [
 		{
@@ -79,38 +79,7 @@
 					]
 				},
 				"method": "POST",
-				"header": [
-					{
-						"key": "X-User-Id",
-						"value": "8c1d33b5-b85f-4c6d-b73a-2b61992c3a52",
-						"type": "text"
-					},
-					{
-						"key": "X-Role",
-						"value": "USER",
-						"type": "text"
-					},
-					{
-						"key": "X-Email",
-						"value": "reda@gmail.com",
-						"type": "text"
-					},
-					{
-						"key": "X-FIrst-Name",
-						"value": "reda",
-						"type": "text"
-					},
-					{
-						"key": "X-Last-Name",
-						"value": "himmi",
-						"type": "text"
-					},
-					{
-						"key": "X-Phone-Number",
-						"value": "0612218950",
-						"type": "text"
-					}
-				],
+				"header": [],
 				"body": {
 					"mode": "raw",
 					"raw": "{\n    \"startLng\": 20.2,\n    \"startLat\": 33.2,\n    \"endLng\": 20.1,\n    \"endLat\": 50.1,\n    \"seats\": 2,\n    \"preferredPrice\": 12.22\n}",
@@ -149,38 +118,7 @@
 					]
 				},
 				"method": "PUT",
-				"header": [
-					{
-						"key": "X-User-Id",
-						"value": "8c1d33b5-b85f-4c6d-b73a-2b61992c3a52",
-						"type": "text"
-					},
-					{
-						"key": "X-Role",
-						"value": "USER",
-						"type": "text"
-					},
-					{
-						"key": "X-Email",
-						"value": "reda@gmail.com",
-						"type": "text"
-					},
-					{
-						"key": "X-FIrst-Name",
-						"value": "reda",
-						"type": "text"
-					},
-					{
-						"key": "X-Last-Name",
-						"value": "himmi",
-						"type": "text"
-					},
-					{
-						"key": "X-Phone-Number",
-						"value": "0612218950",
-						"type": "text"
-					}
-				],
+				"header": [],
 				"body": {
 					"mode": "raw",
 					"raw": "{\n    \"rideProposalId\": \"48ff06e1-f937-4f2f-ae04-a6ec1b524d7e\"\n}",
@@ -221,38 +159,7 @@
 					]
 				},
 				"method": "GET",
-				"header": [
-					{
-						"key": "X-User-Id",
-						"value": "8c1d33b5-b85f-4c6d-b73a-2b61992c3a52",
-						"type": "text"
-					},
-					{
-						"key": "X-Role",
-						"value": "USER",
-						"type": "text"
-					},
-					{
-						"key": "X-Email",
-						"value": "reda@gmail.com",
-						"type": "text"
-					},
-					{
-						"key": "X-FIrst-Name",
-						"value": "reda",
-						"type": "text"
-					},
-					{
-						"key": "X-Last-Name",
-						"value": "himmi",
-						"type": "text"
-					},
-					{
-						"key": "X-Phone-Number",
-						"value": "0612218950",
-						"type": "text"
-					}
-				],
+				"header": [],
 				"url": {
 					"raw": "http://localhost:8085/api/rides/9748f423-a8ce-4c32-91c9-eaccd2f809ca/proposals/stream",
 					"protocol": "http",
@@ -285,38 +192,7 @@
 					]
 				},
 				"method": "GET",
-				"header": [
-					{
-						"key": "X-User-Id",
-						"value": "29eda2e5-736f-4a74-b0ad-864a7ce520e8",
-						"type": "text"
-					},
-					{
-						"key": "X-Role",
-						"value": "DRIVER",
-						"type": "text"
-					},
-					{
-						"key": "X-Email",
-						"value": "redriver@gmail.com",
-						"type": "text"
-					},
-					{
-						"key": "X-FIrst-Name",
-						"value": "redriver",
-						"type": "text"
-					},
-					{
-						"key": "X-Last-Name",
-						"value": "himmi",
-						"type": "text"
-					},
-					{
-						"key": "X-Phone-Number",
-						"value": "0612218950",
-						"type": "text"
-					}
-				],
+				"header": [],
 				"url": {
 					"raw": "http://localhost:8085/api/rides/nearby/stream?lat=33.3&lng=20.2&radius=100",
 					"protocol": "http",
@@ -362,38 +238,7 @@
 					]
 				},
 				"method": "POST",
-				"header": [
-					{
-						"key": "X-User-Id",
-						"value": "29eda2e5-736f-4a74-b0ad-864a7ce520e8",
-						"type": "text"
-					},
-					{
-						"key": "X-Role",
-						"value": "DRIVER",
-						"type": "text"
-					},
-					{
-						"key": "X-Email",
-						"value": "redriver@gmail.com",
-						"type": "text"
-					},
-					{
-						"key": "X-FIrst-Name",
-						"value": "redriver",
-						"type": "text"
-					},
-					{
-						"key": "X-Last-Name",
-						"value": "himmi",
-						"type": "text"
-					},
-					{
-						"key": "X-Phone-Number",
-						"value": "0612218950",
-						"type": "text"
-					}
-				],
+				"header": [],
 				"body": {
 					"mode": "raw",
 					"raw": "{\n    \"rideRequestId\": \"9748f423-a8ce-4c32-91c9-eaccd2f809ca\",\n    \"price\": 300.4\n}",
