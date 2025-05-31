@@ -143,7 +143,7 @@ Spring Webflux).
 ## 4. Fondamentaux de la programmation réactive
 
 ### 4.1 Reactive Manifesto
-(Le manifeste Réactif)[ https://www.reactivemanifesto.org/fr ]  définit un système réactif comme étant un système distribué possédant quatre caractéristiques :
+[Le manifeste Réactif](https://www.reactivemanifesto.org/fr) définit un système réactif comme étant un système distribué possédant quatre caractéristiques :
 <figure>
   <img width="600" src="./images/reactive_system.png" alt="Système Réactif" title="Système Réactif">
   <figcaption style="text-align: center;"><strong>Caractéristiques d'un système réactif</strong> - source: <a href="https://www.reactivemanifesto.org/fr">Reactive Manifesto</a></figcaption>
