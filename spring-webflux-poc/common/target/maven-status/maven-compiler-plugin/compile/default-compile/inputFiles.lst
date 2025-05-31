@@ -1,5 +1,0 @@
-/home/reda/reactive-programming-poc/spring-webflux-poc/common/src/main/java/fr/univ/artois/reda/Main.java
-/home/reda/reactive-programming-poc/spring-webflux-poc/common/src/main/java/fr/univ/artois/reda/avro/RideProposalAcceptedEvent.java
-/home/reda/reactive-programming-poc/spring-webflux-poc/common/src/main/java/fr/univ/artois/reda/avro/RideProposalBookedEvent.java
-/home/reda/reactive-programming-poc/spring-webflux-poc/common/src/main/java/fr/univ/artois/reda/avro/RideProposalProposedEvent.java
-/home/reda/reactive-programming-poc/spring-webflux-poc/common/src/main/java/fr/univ/artois/reda/avro/RideRequestRequestedEvent.java
