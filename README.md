@@ -1,48 +1,60 @@
 # Programmation Réactive en Java & SpringBoot
 
 ## Sommaire
-1.  [Introduction](#1-introduction)
-2.  [Threads & Processus](#2-threads--processus)
-    * [Processus](#21-processus)
-    * [Threads](#22-threads)
-        * [Modèles du threading](#221-modèles-du-threading)
-3.  [Modèle traditionnel vs Modèle réactif](#3-modèle-traditionnel-vs-modèle-réactif)
-    * [Architecture et limites du modèle traditionnel (servlet)](#31-architecture-et-limites-du-modèle-traditionnel-servlet)
-    * [Principes du modèle réactif](#32-principes-du-modèle-réactif)
-4.  [Fondamentaux de la programmation réactive](#4-fondamentaux-de-la-programmation-réactive)
-    * [Reactive Manifesto](#41-reactive-manifesto)
-    * [L'initiative Reactive Streams vs. JDK9](#42-linitiative-reactive-streams-vs-jdk9)
-    * [Concepts clés (Back pressure, Event-loop, Non-blocking I/O)](#43-concepts-clés-back-pressure-event-loop-non-blocking-io)
-        * [Back pressure](#431-back-pressure)
-        * [Event-loop](#432-event-loop)
-        * [Non-blocking IO](#433-non-blocking-io)
-5.  [Implémentations Java de la programmation réactive](#5-implémentations-java-de-la-programmation-réactive)
-    * [Project Reactor en détail](#51-project-reactor-en-détail)
-        * [Reactor Core (Flux vs Mono vs Publisher)](#511-reactor-core-flux-vs-mono-vs-publisher)
-        * [Opérateurs essentiels](#512-opérateurs-essentiels)
-        * [Schedulers.boundedElastic, Schedulers.parallel, subscribeOn & publishOn](#513-schedulersboundedelastic-schedulersparallel-subscribeon--publishon)
-6.  [Spring WebFlux](#6-spring-webflux)
-    * [Architecture et principes](#61-architecture-et-principes)
-        * [Event-Loop Thread](#611-eventloop-thread) 
-        * [Cycle de vie d'une requête dans Spring WebFlux](#612-cycle-de-vie-dune-requete-dans-spring-webflux)
-7.  [Persistance réactive avec R2DBC, Reactor Kafka, WebClient](#7-persistance-réactive-avec-r2dbc--reactor-kafka-webclient-)
-    * [Principes de R2DBC](#71-principes-de-r2dbc)
-    * [Intégration avec Spring Data R2DBC](#72-intégration-avec-spring-data-r2dbc)
-    * [Reactor Kafka](#73-reactor-kafka)
-    * [Intégration avec Spring Kafka](#74-intégration-avec-spring-kafka)
-8.  [POC pratique](#8-poc-pratique)
-    * [Pré-requis](#81-pré-requis)
-    * [Lancement du POC](#82-lancement-du-poc)
-    * [Technologies utilisées](#83-technologies-utilisées)
-    * [Fonctionnalités](#84-fonctionnalités)
-    * [Documentation des Endpoints API](#85-documentation-des-endpoints-api)
-    * [Exemples de code](#86-exemples-de-code)
-        * [Création d'une demande de course](#861-création-dune-demande-de-course-ride-service)
-        * [Recherche des courses à proximité](#862-recherche-des-courses-à-proximité-driver-service)
-        * [Proposition de course par un conducteur](#863-proposition-de-course-par-un-conducteur-driver-service)
-        * [Acceptation d'une proposition](#864-acceptation-dune-proposition-ride-service)
-        * [Consommation des événements Kafka](#865-consommation-des-événements-kafka-driver-service)
-9.  [Références](#9-références)
+- [Programmation Réactive en Java \& SpringBoot](#programmation-réactive-en-java--springboot)
+  - [Sommaire](#sommaire)
+  - [1. Introduction](#1-introduction)
+  - [2. Threads \& Processus](#2-threads--processus)
+    - [2.1 Processus](#21-processus)
+    - [2.2 Threads](#22-threads)
+      - [2.2.1 Modèles du threading](#221-modèles-du-threading)
+  - [3. Modèle traditionnel vs Modèle réactif](#3-modèle-traditionnel-vs-modèle-réactif)
+    - [3.1 Architecture et limites du modèle traditionnel (servlet)](#31-architecture-et-limites-du-modèle-traditionnel-servlet)
+    - [3.2 Principes du modèle réactif](#32-principes-du-modèle-réactif)
+  - [4. Fondamentaux de la programmation réactive](#4-fondamentaux-de-la-programmation-réactive)
+    - [4.1 Reactive Manifesto](#41-reactive-manifesto)
+    - [4.2 L'initiative Reactive Streams vs. JDK9](#42-linitiative-reactive-streams-vs-jdk9)
+    - [4.3 Concepts clés (Back pressure, Event-loop, Non-blocking I/O)](#43-concepts-clés-back-pressure-event-loop-non-blocking-io)
+      - [4.3.1 Back pressure](#431-back-pressure)
+      - [4.3.2 Event-loop](#432-event-loop)
+      - [4.3.3 Non-blocking IO](#433-non-blocking-io)
+  - [5. Implémentations Java de la programmation réactive](#5-implémentations-java-de-la-programmation-réactive)
+    - [5.1 Project Reactor en détail](#51-project-reactor-en-détail)
+      - [5.1.1 Reactor Core (Flux vs Mono vs Publisher)](#511-reactor-core-flux-vs-mono-vs-publisher)
+      - [5.1.2 Opérateurs essentiels](#512-opérateurs-essentiels)
+      - [5.1.3 Schedulers.boundedElastic, Schedulers.parallel, subscribeOn \& publishOn](#513-schedulersboundedelastic-schedulersparallel-subscribeon--publishon)
+  - [6. Spring WebFlux](#6-spring-webflux)
+    - [6.1 Architecture et principes](#61-architecture-et-principes)
+      - [6.1.1 EventLoop Thread](#611-eventloop-thread)
+      - [6.1.2 Cycle de vie d'une requete dans Spring Webflux](#612-cycle-de-vie-dune-requete-dans-spring-webflux)
+  - [7. Persistance réactive avec R2DBC , Reactor Kafka, WebClient](#7-persistance-réactive-avec-r2dbc--reactor-kafka-webclient)
+    - [7.1 Principes de R2DBC](#71-principes-de-r2dbc)
+    - [7.2 Intégration avec Spring Data R2DBC](#72-intégration-avec-spring-data-r2dbc)
+    - [7.3 Reactor Kafka](#73-reactor-kafka)
+    - [7.4 Intégration avec Spring Kafka](#74-intégration-avec-spring-kafka)
+  - [8. POC pratique](#8-poc-pratique)
+  - [8.1 Pré-requis](#81-pré-requis)
+  - [8.2 Lancement du POC](#82-lancement-du-poc)
+  - [8.3 Technologies utilisées](#83-technologies-utilisées)
+  - [8.4 Fonctionnalités](#84-fonctionnalités)
+    - [8.5 Documentation des Endpoints API](#85-documentation-des-endpoints-api)
+      - [Authentification](#authentification)
+        - [Inscription (USER ou DRIVER)](#inscription-user-ou-driver)
+        - [Authentification](#authentification-1)
+      - [Gestion des courses (USER)](#gestion-des-courses-user)
+        - [Créer une demande de course](#créer-une-demande-de-course)
+        - [Accepter une proposition de course](#accepter-une-proposition-de-course)
+        - [Obtenir les propositions de courses (SSE)](#obtenir-les-propositions-de-courses-sse)
+      - [Gestion des courses (DRIVER)](#gestion-des-courses-driver)
+        - [Voir les demandes de courses à proximité (SSE)](#voir-les-demandes-de-courses-à-proximité-sse)
+        - [Proposer une course](#proposer-une-course)
+    - [8.6 Exemples de code](#86-exemples-de-code)
+      - [8.6.1 Création d'une demande de course (ride-service)](#861-création-dune-demande-de-course-ride-service)
+      - [8.6.2 Recherche des courses à proximité (driver-service)](#862-recherche-des-courses-à-proximité-driver-service)
+      - [8.6.3 Proposition de course par un conducteur (driver-service)](#863-proposition-de-course-par-un-conducteur-driver-service)
+      - [8.6.4 Acceptation d'une proposition (ride-service)](#864-acceptation-dune-proposition-ride-service)
+      - [8.6.5 Consommation des événements Kafka (driver-service)](#865-consommation-des-événements-kafka-driver-service)
+  - [9. Références](#9-références)
 
 ## 1. Introduction
 
@@ -683,17 +695,23 @@ public class KafkaProducerConfig {
 ## 8.2 Lancement du POC
 
 ```bash
+mvn clean install -U # compile et installe tous les modules du projet en mettant à jour les dépendances
+
 cd spring-webflux-poc
-docker compose up -d
+docker compose up -d # démarre les services Docker (Kafka, PostgreSQL, MongoDB, Schema Registry, akhq etc.)
+
 cd common
-mvn compile
-mvn schema-registry:register
+mvn schema-registry:register # enregistre les schémas dans le Schema Registry. Si la commande échoue, réessayez après quelques instants.
+
 cd ../auth-service
 mvn spring-boot:run
+
 cd ../ride-service
 mvn spring-boot:run
+
 cd ../driver-service
 mvn spring-boot:run
+
 cd ../api-gateway
 mvn spring-boot:run
 ```
