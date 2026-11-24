@@ -4,7 +4,7 @@
 
 A ride-hailing backend built reactive end to end with Spring WebFlux, Kafka, R2DBC and MongoDB. A rider posts a ride request, nearby drivers see it in real time and send price offers, and the rider sees the offers live and accepts one.
 
-I built it during my Master's in Software Engineering (Université d'Artois) to compare the thread-per-request model with the reactive model. The full write-up on reactive programming in Java (threads, Reactive Streams, Reactor, WebFlux internals, R2DBC, Reactor Kafka) is in [GUIDE.md](GUIDE.md) ([French version](GUIDE.fr.md)).
+I built it to compare the thread-per-request model with the reactive model. The full write-up on reactive programming in Java (threads, Reactive Streams, Reactor, WebFlux internals, R2DBC, Reactor Kafka) is in [GUIDE.md](GUIDE.md) ([French version](GUIDE.fr.md)).
 
 ## Architecture
 
@@ -118,13 +118,11 @@ More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 - **Typed events.** Kafka events are Avro records registered in Schema Registry, generated in the `common` module and shared by all services.
 - **Each service owns its data.** ride-service keeps the rider's view in PostgreSQL; driver-service keeps its own copy in MongoDB, where geo queries and change streams are built in.
 
-## Known limitations
+## TODO
 
-This is a learning project. These are the issues I would fix before using the design in production:
-
-1. **Database and Kafka writes are not atomic.** Services save to the database, then publish to Kafka. `@Transactional` only covers the database, so a crash or a Kafka error between the two steps loses the event. Fix: the transactional outbox pattern.
-2. **Offset acknowledged before the follow-up event is sent.** In driver-service's `RideProposalAcceptedEventConsumer`, the offset is acknowledged after the MongoDB save but before the "booked" event is published, so a failed publish loses that event. When the request or the offer is not found, the record is skipped with no log and no dead-letter topic.
-3. **No error recovery in the driver-service consumer.** It ends with a bare `subscribe()`, and `KafkaFluxRegistry` only logs errors. One exception, a database timeout for example, terminates the stream, and the service stops consuming until restarted. Fix: per-record `onErrorResume` or `retryWhen`, plus a dead-letter topic.
-4. **One change stream per connected driver.** Each SSE connection opens its own MongoDB change stream. That is fine for a demo; with many drivers, one shared stream fanned out to subscribers (for example with `Sinks.many().multicast()`) scales better.
-5. **Reactor Kafka is discontinued.** The project stopped in May 2025 and Spring Kafka's reactive templates are deprecated ([announcement](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). The way forward is plain Spring Kafka (`KafkaTemplate`, `@KafkaListener`) bridged to `Mono`/`Flux`.
-6. **No automated tests yet.** Next step: integration tests with Testcontainers (Kafka, PostgreSQL, MongoDB) and `StepVerifier` for the reactive pipelines.
+- [ ] **Make database and Kafka writes atomic.** Services save to the database, then publish to Kafka. `@Transactional` only covers the database, so a crash or a Kafka error between the two steps loses the event. Plan: transactional outbox pattern.
+- [ ] **Acknowledge offsets after the follow-up event is sent.** In driver-service's `RideProposalAcceptedEventConsumer`, the offset is acknowledged before the "booked" event is published. Also log requests or offers that are not found and route them to a dead-letter topic instead of skipping them silently.
+- [ ] **Add error recovery to the driver-service consumer.** It ends with a bare `subscribe()` and `KafkaFluxRegistry` only logs errors, so one exception stops consumption until restart. Plan: per-record `onErrorResume` or `retryWhen`, plus a dead-letter topic.
+- [ ] **Share one change stream across drivers.** Each SSE connection opens its own MongoDB change stream. Plan: one shared stream fanned out to subscribers with `Sinks.many().multicast()`.
+- [ ] **Migrate off Reactor Kafka.** The project was discontinued in May 2025 and Spring Kafka's reactive templates are deprecated ([announcement](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Plan: plain Spring Kafka (`KafkaTemplate`, `@KafkaListener`) bridged to `Mono`/`Flux`.
+- [ ] **Add automated tests.** Integration tests with Testcontainers (Kafka, PostgreSQL, MongoDB) and `StepVerifier` for the reactive pipelines.
