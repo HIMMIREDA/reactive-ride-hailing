@@ -4,7 +4,7 @@
 
 A ride-hailing backend built reactive end to end with Spring WebFlux, Kafka, R2DBC and MongoDB. A rider posts a ride request, nearby drivers see it in real time and send price offers, and the rider sees the offers live and accepts one.
 
-I built it during my Master's in Software Engineering (Université d'Artois) to compare the thread-per-request model with the reactive model. The full write-up on reactive programming in Java (threads, Reactive Streams, Reactor, WebFlux internals, R2DBC, Reactor Kafka) is in [GUIDE.fr.md](GUIDE.fr.md), in French.
+I built it during my Master's in Software Engineering (Université d'Artois) to compare the thread-per-request model with the reactive model. The full write-up on reactive programming in Java (threads, Reactive Streams, Reactor, WebFlux internals, R2DBC, Reactor Kafka) is in [GUIDE.md](GUIDE.md) ([French version](GUIDE.fr.md)).
 
 ## Architecture
 
@@ -109,7 +109,7 @@ Example: create a ride request.
 curl -X POST http://localhost:8085/api/rides -H "Content-Type: application/json" -H "Authorization: Bearer YOUR_JWT_TOKEN" -d '{"startLng": 20.2, "startLat": 33.2, "endLng": 20.1, "endLat": 50.1, "seats": 2, "preferredPrice": 12.22}'
 ```
 
-More curl examples are in [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-documentation-des-endpoints-api).
+More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 
 ## Design choices
 
