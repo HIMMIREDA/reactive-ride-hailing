@@ -1044,7 +1044,7 @@ These examples show how the POC's main features are built with Spring WebFlux an
 
 * Error handling with switchIfEmpty and handle
 
-* Reactive transactions with @Transactional (database only: the Kafka send is not part of the transaction; see "Known limitations" in the README)
+* Reactive transactions with @Transactional (database only: the Kafka send is not part of the transaction; see the TODO list in the README)
 
 * Kafka for communication between services
 
