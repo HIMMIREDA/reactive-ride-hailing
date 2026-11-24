@@ -4,7 +4,7 @@
 
 Un backend de VTC entièrement réactif, construit avec Spring WebFlux, Kafka, R2DBC et MongoDB. Un passager publie une demande de course, les conducteurs à proximité la voient en temps réel et proposent un prix, puis le passager voit les propositions en direct et en accepte une.
 
-Je l'ai réalisé pendant mon Master en Ingénierie Logicielle (Université d'Artois) pour comparer le modèle « un thread par requête » au modèle réactif. Le guide complet sur la programmation réactive en Java (threads, Reactive Streams, Reactor, fonctionnement interne de WebFlux, R2DBC, Reactor Kafka) se trouve dans [GUIDE.fr.md](GUIDE.fr.md).
+Je l'ai réalisé pendant mon Master en Ingénierie Logicielle (Université d'Artois) pour comparer le modèle « un thread par requête » au modèle réactif. Le guide complet sur la programmation réactive en Java (threads, Reactive Streams, Reactor, fonctionnement interne de WebFlux, R2DBC, Reactor Kafka) se trouve dans [GUIDE.fr.md](GUIDE.fr.md) ([version anglaise](GUIDE.md)).
 
 ## Architecture
 
