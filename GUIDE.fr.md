@@ -1044,7 +1044,7 @@ Ces exemples de code illustrent l'implémentation des principales fonctionnalit�
 
 * Gestion des erreurs avec switchIfEmpty et handle
 
-* Transactions réactives avec l'annotation @Transactional (limitées à la base de données : l'envoi Kafka n'en fait pas partie, voir « Limites connues » dans le README)
+* Transactions réactives avec l'annotation @Transactional (limitées à la base de données : l'envoi Kafka n'en fait pas partie, voir la liste TODO dans le README)
 
 * Intégration avec Kafka pour la communication entre services
 
