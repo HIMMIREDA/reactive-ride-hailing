@@ -1,5 +1,7 @@
 # Programmation Réactive en Java & SpringBoot
 
+*[English](GUIDE.md) · Français*
+
 ## Sommaire
 - [Programmation Réactive en Java \& SpringBoot](#programmation-réactive-en-java--springboot)
   - [Sommaire](#sommaire)
@@ -514,7 +516,7 @@ Cette approche permet à **Spring WebFlux** de gérer un grand nombre de requêt
 Pour qu'une application soit véritablement réactive, il faut que l'ensemble du processus le soit : depuis l'interaction de l'utilisateur avec le serveur jusqu'à l'enregistrement des données sur la base de données et la communication avec d'autres services tels que Kafka. C'est pourquoi des outils réactifs ont été créés, comme R2DBC pour les bases de données et Reactor Kafka (ou Spring Kafka Reactive) pour la messagerie. Ils sont conçus pour fonctionner parfaitement avec des outils réactifs comme Spring WebFlux et Project Reactor, en gardant notre application réactive de bout en bout (end-to-end).
 
 ### 7.1 Principes de R2DBC
-[R2DBC](https://r2dbc.io/) (Reactive Relational Database Connectivity) est une spécification pour l'accès réactif et non bloquant aux bases de données relationnelles sous la JVM. Son objectif principal est de surmonter les limitations de JDBC dans les environnements réactifs en offrant une API asynchrone et non bloquante.  Lorsque l'on travaille avec PostgreSQL dans un contexte réactif avec Spring WebFlux, l'implémentation de R2DBC pour PostgreSQL, fournie par le projet `io.r2dbc:r2dbc-postgresql`, est le choix privilégié pour maintenir la réactivité de bout en bout.
+[R2DBC](https://r2dbc.io/) (Reactive Relational Database Connectivity) est une spécification pour l'accès réactif et non bloquant aux bases de données relationnelles sous la JVM. Son objectif principal est de surmonter les limitations de JDBC dans les environnements réactifs en offrant une API asynchrone et non bloquante.  Lorsque l'on travaille avec PostgreSQL dans un contexte réactif avec Spring WebFlux, l'implémentation de R2DBC pour PostgreSQL, fournie par `org.postgresql:r2dbc-postgresql` (anciennement `io.r2dbc:r2dbc-postgresql`), est le choix privilégié pour maintenir la réactivité de bout en bout.
 
 ### 7.2 Intégration avec Spring Data R2DBC
 **[Spring Data R2DBC](https://spring.io/projects/spring-data-r2dbc)** simplifie considérablement l'interaction réactive avec **PostgreSQL** (ou d'autres bases de données relationnelles supportées) dans une application **Spring WebFlux**. Il fournit une couche d'abstraction au-dessus de l'API **R2DBC** native.
@@ -721,7 +723,7 @@ mvn spring-boot:run
 4.  [Apache Kafka](https://kafka.apache.org/)
 5.  [Confluent Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
 6.  [Apache Avro](https://avro.apache.org/) comme format de **sérialisation** et **désérialisation** des messages kafka.
-7.  [PostgreSQL](https://www.postgresql.org/) et [Spring Data R2DBC]().
+7.  [PostgreSQL](https://www.postgresql.org/) et [Spring Data R2DBC](https://spring.io/projects/spring-data-r2dbc).
 8.  [MongoDB](https://www.mongodb.com/) et [Spring Data MongoDB Reactive](https://www.baeldung.com/spring-data-mongodb-reactive).
 9.  [Spring for Apache Kafka Reactive](https://spring.io/projects/spring-kafka)
 
