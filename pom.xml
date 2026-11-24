@@ -11,8 +11,8 @@
         <relativePath/>
     </parent>
 
-    <groupId>fr.univ.artois.reda</groupId>
-    <artifactId>reactive-programming-guide</artifactId>
+    <groupId>io.github.himmireda</groupId>
+    <artifactId>reactive-ride-hailing</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <modules>

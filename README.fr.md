@@ -73,6 +73,7 @@ Pré-requis : Java 21, Maven, Docker avec Docker Compose.
 mvn clean install -U
 
 cd spring-webflux-poc
+cp .env.example .env           # puis choisissez votre utilisateur/mot de passe PostgreSQL
 docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
 
 cd common

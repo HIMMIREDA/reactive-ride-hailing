@@ -1,6 +1,8 @@
 server:
   port: 8083
 spring:
+  config:
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   kafka:
     bootstrap-servers: localhost:9092
     properties:
@@ -12,8 +14,8 @@ spring:
 
   r2dbc:
     url: r2dbc:postgresql://localhost:15432/rides
-    username: artois
-    password: artois123
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
   flyway:
     url: jdbc:postgresql://localhost:15432/rides
     locations: classpath:db/migration
