@@ -846,13 +846,8 @@ public class RideRequestServiceImpl implements RideRequestService {
         Flux<RideRequestEntity> nearRides = rideRequestRepository
                 .findByStatusAndStartLocationNear(RideRequestStatus.REQUESTED, driverPoint, distance);
 
-        // 3. Surveillance en temps réel des nouvelles courses
-        Flux<RideRequestEntity> liveNearbyRides = reactiveMongoTemplate
-                .changeStream(RideRequestEntity.class)
-                .watchCollection("ride_requests")
-                .filter(Criteria.where("status").is(RideRequestStatus.REQUESTED.toString()))
-                .listen()
-                .mapNotNull(ChangeStreamEvent::getBody)
+        // 3. Flux en direct : le change stream unique et partagé du service, filtré par distance
+        Flux<RideRequestEntity> liveNearbyRides = rideRequestChangeStream.rideRequests()
                 .filter(ride -> isWithinRadius(driverPoint, ride.getStartLocation(), radiusKm));
 
         // 4. Combinaison des deux flux
@@ -860,6 +855,8 @@ public class RideRequestServiceImpl implements RideRequestService {
     }
 }
 ```
+
+`rideRequestChangeStream` (`RideRequestChangeStream`) ouvre un seul change stream MongoDB au démarrage du service et le diffuse à tous les abonnés avec `Sinks.many().multicast().directBestEffort()` : un abonné sans demande manque simplement l'événement, les autres ne sont pas ralentis. `rideRequests()` ajoute un tampon borné par abonné (`onBackpressureBuffer(256, DROP_OLDEST)`), et le flux se rouvre avec `resumeAfter(token)` après une erreur. Avant, chaque connexion SSE ouvrait son propre change stream (un curseur serveur par conducteur).
 
 #### 8.6.3 Proposition de course par un conducteur (driver-service)
 

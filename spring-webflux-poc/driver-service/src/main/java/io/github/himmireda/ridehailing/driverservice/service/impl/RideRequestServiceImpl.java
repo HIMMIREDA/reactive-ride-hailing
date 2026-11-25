@@ -1,6 +1,7 @@
 package io.github.himmireda.ridehailing.driverservice.service.impl;
 
 import io.github.himmireda.ridehailing.driverservice.dto.internal.DriverInternalDto;
+import io.github.himmireda.ridehailing.driverservice.changestream.RideRequestChangeStream;
 import io.github.himmireda.ridehailing.driverservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.driverservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepository;
@@ -8,10 +9,7 @@ import io.github.himmireda.ridehailing.driverservice.service.RideRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.Metrics;
-import org.springframework.data.mongodb.core.ChangeStreamEvent;
-import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
-import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -20,24 +18,22 @@ import reactor.core.publisher.Flux;
 public class RideRequestServiceImpl implements RideRequestService {
 
     private final RideRequestRepository rideRequestRepository;
-    private final ReactiveMongoTemplate reactiveMongoTemplate;
+    private final RideRequestChangeStream rideRequestChangeStream;
 
+    /**
+     * Nearby requests = history (geo query) followed by the live feed. The live feed is the one shared
+     * change stream of the service, filtered here by distance: no MongoDB cursor per SSE connection.
+     */
     @Override
     public Flux<RideRequestEntity> getNearbyRideRequests(DriverInternalDto driverInternalDto, Double lat, Double lng, Integer radiusKm) {
         GeoJsonPoint driverPoint = new GeoJsonPoint(lng, lat);
         Distance distance = new Distance(radiusKm, Metrics.KILOMETERS);
         Flux<RideRequestEntity> nearRides = rideRequestRepository.findByStatusAndStartLocationNear(RideRequestStatus.REQUESTED, driverPoint, distance);
-        Flux<RideRequestEntity> liveNearbyRides = reactiveMongoTemplate
-                .changeStream(RideRequestEntity.class)
-                .watchCollection("ride_requests")
-                .filter(Criteria.where("status").is(RideRequestStatus.REQUESTED.toString()))
-                .listen()
-                .mapNotNull(ChangeStreamEvent::getBody)
-                .filter(ride -> ride != null && isWithinRadius(driverPoint, ride.getStartLocation(), radiusKm))
-                .log();
+        Flux<RideRequestEntity> liveNearbyRides = rideRequestChangeStream.rideRequests()
+                .filter(ride -> ride.getStartLocation() != null && isWithinRadius(driverPoint, ride.getStartLocation(), radiusKm));
         return Flux.concat(nearRides, liveNearbyRides);
     }
-    // formule de haversine pour calculer la distance du grand cercle entre 2 pts en utilisant lat et lng
+    // Haversine formula: great-circle distance between two points from their latitude and longitude
     private boolean isWithinRadius(GeoJsonPoint center, GeoJsonPoint target, int radiusKm) {
         double lat1 = center.getY();
         double lon1 = center.getX();
