@@ -693,7 +693,7 @@ public class KafkaProducerConfig {
 
 ## 8.2 Running the POC
 
-See [Running it locally](README.md#running-it-locally) in the README: copy `.env`, set `JWT_SECRET`, run `docker compose up --build`, then `scripts/smoke-test.sh`. It also explains how to run a single service from your IDE.
+See [Running it locally](README.md#running-it-locally) in the README: copy `.env`, set `JWT_SECRET`, run `docker compose up --build`, then `scripts/smoke-test.sh` (from the repository root or `spring-webflux-poc/`). It also explains how to run a single service from your IDE.
 
 ## 8.3 Technologies used
 

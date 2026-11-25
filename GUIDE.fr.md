@@ -693,7 +693,7 @@ public class KafkaProducerConfig {
 
 ## 8.2 Lancer le POC
 
-Voir [Lancer le projet en local](README.fr.md#lancer-le-projet-en-local) dans le README : copier `.env`, renseigner `JWT_SECRET`, lancer `docker compose up --build`, puis `scripts/smoke-test.sh`. Le README explique aussi comment lancer un seul service depuis l'IDE.
+Voir [Lancer le projet en local](README.fr.md#lancer-le-projet-en-local) dans le README : copier `.env`, renseigner `JWT_SECRET`, lancer `docker compose up --build`, puis `scripts/smoke-test.sh` (depuis la racine du dépôt ou `spring-webflux-poc/`). Le README explique aussi comment lancer un seul service depuis l'IDE.
 
 ## 8.3 Technologies utilisées
 

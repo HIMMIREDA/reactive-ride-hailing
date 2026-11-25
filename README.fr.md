@@ -84,7 +84,8 @@ Compose construit les images des quatre services, démarre PostgreSQL, MongoDB (
 Une fois tout en bonne santé, lancez le test de bout en bout depuis la racine du dépôt (nécessite `curl` et `jq`). Il inscrit un passager et un conducteur, crée une course, envoie et accepte une proposition, et vérifie que la course finit `BOOKED` :
 
 ```bash
-scripts/smoke-test.sh
+scripts/smoke-test.sh            # depuis la racine du dépôt
+../scripts/smoke-test.sh         # ou depuis spring-webflux-poc/
 ```
 
 Ports publiés : API gateway http://localhost:8085 et AKHQ http://localhost:9000. Rien d'autre n'est joignable depuis la machine hôte (voir [Choix de conception](#choix-de-conception)). Pour accéder directement à une base, à Kafka, au Schema Registry ou à un service pendant le débogage, copiez `spring-webflux-poc/docker-compose.override.example.yml` en `docker-compose.override.yml` (ignoré par git) ; le fichier explique ce qu'il ouvre.
@@ -97,7 +98,7 @@ Ports publiés : API gateway http://localhost:8085 et AKHQ http://localhost:9000
 
 La gateway en conteneur route toujours vers le conteneur `ride-service`. Pour faire passer le trafic par une gateway jusqu'à l'instance de l'IDE, lancez aussi `api-gateway` depuis l'IDE (par défaut, elle pointe vers `localhost:8082`-`8084`).
 
-Une collection Postman est fournie : `spring-webflux-poc/poc-spring-webflux.postman_collection.json`.
+Une collection Postman est fournie : `spring-webflux-poc/poc-spring-webflux.postman_collection.json`. Lancez les requêtes dans l'ordre : les requêtes de connexion enregistrent les JWT dans les variables de collection `{{jwt}}` (passager) et `{{driverJwt}}` (conducteur), et les requêtes de création et de proposition enregistrent les identifiants utilisés par les suivantes. Aucun token n'est stocké dans le fichier.
 
 ## API
 
