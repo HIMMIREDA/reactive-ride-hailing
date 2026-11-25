@@ -10,6 +10,8 @@ import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
@@ -22,7 +24,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
@@ -152,6 +157,37 @@ class ApiGatewayAuthenticationIT {
         assertThat(forwarded.containsHeader("X-Role")).isFalse();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"sub", "role", "email"})
+    void tokenMissingARequiredClaimIsRejected(String claim) {
+        // Without these the request can't be attributed or authorized: reject rather than guess.
+        assertUnauthorizedWith(token(SECRET, Instant.now().plus(Duration.ofHours(1)), Set.of(claim)));
+    }
+
+    @Test
+    void missingOptionalProfileClaimIsNotForwardedAsLiteralNull() {
+        // Sign-up does not require a phone number, so auth-service can issue a token without it.
+        webTestClient.get().uri("/api/rides/{id}/proposals/stream", UUID.randomUUID())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer "
+                        + token(SECRET, Instant.now().plus(Duration.ofHours(1)), Set.of("phoneNumber")))
+                .exchange()
+                .expectStatus().isOk();
+
+        LoggedRequest forwarded = singleForwardedRequest();
+        assertThat(forwarded.containsHeader("X-Phone-Number")).isFalse();
+        assertThat(forwarded.header("X-User-Id").values()).containsExactly(userId);
+        assertThat(forwarded.header("X-First-Name").values()).containsExactly("Ada");
+    }
+
+    @Test
+    void healthEndpointIsPublic() {
+        webTestClient.get().uri("/actuator/health")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.status").isEqualTo("UP");
+        assertThat(forwardedRequests()).isEmpty();
+    }
+
     private void assertUnauthorizedWith(String token) {
         webTestClient.get().uri("/api/rides/{id}/proposals/stream", UUID.randomUUID())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -171,19 +207,32 @@ class ApiGatewayAuthenticationIT {
         return requests.get(0);
     }
 
-    /** Same shape as the tokens auth-service issues: HS512, subject = user id, profile claims. */
     private String token(String secret, Instant expiresAt) {
+        return token(secret, expiresAt, Set.of());
+    }
+
+    /**
+     * Same shape as the tokens auth-service issues: HS512, subject = user id, profile claims.
+     * {@code omittedClaims} drops claims, like jjwt does for a user who signed up without them.
+     */
+    private String token(String secret, Instant expiresAt, Set<String> omittedClaims) {
         try {
-            JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                    .subject(userId)
-                    .claim("role", "USER")
-                    .claim("email", "rider@example.com")
-                    .claim("firstName", "Ada")
-                    .claim("lastName", "Lovelace")
-                    .claim("phoneNumber", "0600000001")
+            JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
                     .issueTime(Date.from(expiresAt.minus(Duration.ofDays(1))))
-                    .expirationTime(Date.from(expiresAt))
-                    .build();
+                    .expirationTime(Date.from(expiresAt));
+            Map<String, Object> identity = new LinkedHashMap<>();
+            identity.put("sub", userId);
+            identity.put("role", "USER");
+            identity.put("email", "rider@example.com");
+            identity.put("firstName", "Ada");
+            identity.put("lastName", "Lovelace");
+            identity.put("phoneNumber", "0600000001");
+            identity.forEach((name, value) -> {
+                if (!omittedClaims.contains(name)) {
+                    builder.claim(name, value);
+                }
+            });
+            JWTClaimsSet claims = builder.build();
             SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS512), claims);
             jwt.sign(new MACSigner(secret.getBytes(StandardCharsets.UTF_8)));
             return jwt.serialize();

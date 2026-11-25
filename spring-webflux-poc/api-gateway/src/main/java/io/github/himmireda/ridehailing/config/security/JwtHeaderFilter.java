@@ -39,8 +39,7 @@ public class JwtHeaderFilter implements GlobalFilter {
                 .build();
         ServerWebExchange strippedExchange = exchange.mutate().request(stripped).build();
 
-        String path = stripped.getPath().value();
-        if (path.startsWith("/api/users")) {
+        if (isPublicPath(stripped.getPath().value())) {
             return chain.filter(strippedExchange);
         }
 
@@ -56,12 +55,25 @@ public class JwtHeaderFilter implements GlobalFilter {
                 .flatMap(chain::filter);
     }
 
+    /** Exactly "/api/users" and "/api/users/**": "/api/users-admin" or "/api/usersX" are not public. */
+    static boolean isPublicPath(String path) {
+        return path.equals("/api/users") || path.startsWith("/api/users/");
+    }
+
     private static void setIdentityHeaders(HttpHeaders headers, Jwt jwt) {
-        headers.set(USER_ID, jwt.getSubject());
-        headers.set(ROLE, String.valueOf(jwt.getClaims().get("role")));
-        headers.set(EMAIL, String.valueOf(jwt.getClaims().get("email")));
-        headers.set(FIRST_NAME, String.valueOf(jwt.getClaims().get("firstName")));
-        headers.set(LAST_NAME, String.valueOf(jwt.getClaims().get("lastName")));
-        headers.set(PHONE_NUMBER, String.valueOf(jwt.getClaims().get("phoneNumber")));
+        // sub, role and email are guaranteed by the decoder's validators (JwtDecoderConfig.REQUIRED_CLAIMS).
+        setIfPresent(headers, USER_ID, jwt.getSubject());
+        setIfPresent(headers, ROLE, jwt.getClaimAsString("role"));
+        setIfPresent(headers, EMAIL, jwt.getClaimAsString("email"));
+        // Optional profile claims: a missing one is not forwarded at all, instead of the literal "null".
+        setIfPresent(headers, FIRST_NAME, jwt.getClaimAsString("firstName"));
+        setIfPresent(headers, LAST_NAME, jwt.getClaimAsString("lastName"));
+        setIfPresent(headers, PHONE_NUMBER, jwt.getClaimAsString("phoneNumber"));
+    }
+
+    private static void setIfPresent(HttpHeaders headers, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            headers.set(name, value);
+        }
     }
 }

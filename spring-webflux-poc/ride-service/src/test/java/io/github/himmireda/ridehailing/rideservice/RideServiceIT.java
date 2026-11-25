@@ -112,6 +112,30 @@ class RideServiceIT {
     }
 
     @Test
+    void createRideRequestWithoutOptionalProfileHeadersUsesEmptyValues() {
+        // The gateway does not forward profile claims the token lacks (e.g. no phone number at sign-up).
+        UUID customerId = UUID.randomUUID();
+        Map<String, Object> response = webTestClient.post().uri("/api/rides")
+                .header("X-User-Id", customerId.toString())
+                .header("X-Role", "USER")
+                .header("X-Email", "rider@example.com")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("startLng", 20.2, "startLat", 33.2, "endLng", 20.1, "endLat", 50.1,
+                        "seats", 1, "preferredPrice", 9.5))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .returnResult().getResponseBody();
+        String rideRequestId = (String) response.get("rideRequestId");
+
+        RideRequestRequestedEvent event = AvroKafkaTestClient.<RideRequestRequestedEvent>awaitRecord(
+                kafka.getBootstrapServers(), rideRequestRequestedTopic, r -> r.key().equals(rideRequestId)).value();
+        assertThat(event.getCustomerPhoneNumber()).hasToString("");
+        assertThat(event.getCustomerFirstName()).hasToString("");
+        assertThat(event.getCustomerEmail()).hasToString("rider@example.com");
+    }
+
+    @Test
     void acceptingRequestThatIsNotRequestedReturns409() {
         UUID customerId = UUID.randomUUID();
         RideRequestEntity booked = rideRequestRepository.save(RideRequestEntity.builder()
