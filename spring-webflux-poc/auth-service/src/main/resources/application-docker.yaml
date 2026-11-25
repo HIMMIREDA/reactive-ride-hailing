@@ -1,0 +1,7 @@
+# Active inside docker compose (SPRING_PROFILES_ACTIVE=docker): container hostnames instead of localhost.
+# POSTGRES_USER, POSTGRES_PASSWORD and JWT_SECRET come from the environment (compose reads them from .env).
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://db:5432/users
+  flyway:
+    url: jdbc:postgresql://db:5432/users

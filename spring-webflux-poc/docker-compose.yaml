@@ -1,44 +1,70 @@
+# Whole system in one command:
+#   cp .env.example .env   # then set JWT_SECRET (and the PostgreSQL credentials)
+#   docker compose up --build
+#
+# Only the API gateway (8085) and AKHQ (9000) publish ports on the host. Services, databases, Kafka
+# and Schema Registry are reachable only on the compose network: the services trust the identity
+# headers set by the gateway, so nothing else may reach them. For debugging, see
+# docker-compose.override.example.yml.
+
+x-spring-service: &spring-service
+  build: &spring-build
+    context: ..
+    dockerfile: spring-webflux-poc/Dockerfile
+  restart: unless-stopped
+  environment: &spring-env
+    SPRING_PROFILES_ACTIVE: docker
+
+x-spring-healthcheck: &spring-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 40s
+
 services:
   db:
-    image: postgres:17
-    restart: always
-    ports:
-      - "15432:5432"
+    image: postgres:17.12
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # -h localhost forces TCP: during first-time init the entrypoint runs a temporary server on the
+      # Unix socket only, so a socket check would report "ready" before init.sql has run.
+      test: ["CMD-SHELL", "pg_isready -h localhost -U \"$${POSTGRES_USER}\" -d rides"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
-  akhq:
-    image: tchiotludo/akhq
+  mongodb:
+    image: mongo:6.0.28-jammy
+    container_name: mongodb
     restart: unless-stopped
-    environment:
-      AKHQ_CONFIGURATION: |
-        akhq:
-          connections:
-            docker-kafka-server:
-              properties:
-                bootstrap.servers: "broker:29092"
-              schema-registry:
-                url: "http://schema-registry:8081"
-    ports:
-      - 9000:8080
-    links:
-      - broker
-      - schema-registry
+    volumes:
+      - mongo_data:/data/db
+      - ./docker/mongo-replica-set.sh:/docker/mongo-replica-set.sh:ro
+    command: ["bash", "/docker/mongo-replica-set.sh"]
+    healthcheck:
+      # Healthy only once the node is PRIMARY: rs.status() throws before the replica set exists.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(rs.status().myState === 1 ? 0 : 1)"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
 
   broker:
     image: confluentinc/cp-kafka:7.9.0
     hostname: broker
     container_name: broker
-    ports:
-      - "9092:9092"
-      - "9101:9101"
+    restart: unless-stopped
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      # PLAINTEXT (broker:29092) is used inside compose; PLAINTEXT_HOST (localhost:9092) only matters
+      # when the debug override publishes port 9092.
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092'
       KAFKA_LISTENERS: 'PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092'
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
@@ -53,39 +79,149 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@broker:29093'
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server broker:29092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 20s
+      retries: 12
+      start_period: 15s
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.9.0
     hostname: schema-registry
     container_name: schema-registry
+    restart: unless-stopped
     depends_on:
-      - broker
-    ports:
-      - "8081:8081"
+      broker:
+        condition: service_healthy
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-  mongodb:
-    image: mongo:6-jammy
-    container_name: mongodb
-    ports:
-      - '27017:27017'
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8081/subjects"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # One-shot: registers the Avro schemas, then exits 0. Replaces the manual
+  # `mvn schema-registry:register` step; the services start only after it succeeded.
+  schema-init:
+    image: confluentinc/cp-schema-registry:7.9.0
+    restart: "no"
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+    entrypoint: ["bash", "/docker/register-schemas.sh"]
+    environment:
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SCHEMAS_DIR: /schemas
     volumes:
-      - mongo_data:/data/db
-    command: >
-      bash -c '
-        mongod --replSet rs0 --bind_ip_all &
-        until mongosh --eval "db.adminCommand(\"ping\")"; do sleep 1; done;
-        mongosh --eval "
-          rs.initiate({
-            _id: \"rs0\",
-            version: 1,
-            members: [{ _id: 0, host: \"localhost:27017\" }]
-          });
-        ";
-        wait
-      '
+      - ./docker/register-schemas.sh:/docker/register-schemas.sh:ro
+      - ./common/src/main/resources/avro:/schemas:ro
+
+  auth-service:
+    <<: *spring-service
+    build:
+      <<: *spring-build
+      args:
+        MODULE: auth-service
+    image: reactive-ride-hailing/auth-service:local
+    environment:
+      <<: *spring-env
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -base64 64 | tr -d '\n')}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8082/actuator/health"]
+
+  ride-service:
+    <<: *spring-service
+    build:
+      <<: *spring-build
+      args:
+        MODULE: ride-service
+    image: reactive-ride-hailing/ride-service:local
+    environment:
+      <<: *spring-env
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      schema-init:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8083/actuator/health"]
+
+  driver-service:
+    <<: *spring-service
+    build:
+      <<: *spring-build
+      args:
+        MODULE: driver-service
+    image: reactive-ride-hailing/driver-service:local
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      schema-init:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8084/actuator/health"]
+
+  api-gateway:
+    <<: *spring-service
+    build:
+      <<: *spring-build
+      args:
+        MODULE: api-gateway
+    image: reactive-ride-hailing/api-gateway:local
+    environment:
+      <<: *spring-env
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -base64 64 | tr -d '\n')}
+    ports:
+      - "8085:8085"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      ride-service:
+        condition: service_healthy
+      driver-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8085/actuator/health"]
+
+  akhq:
+    image: tchiotludo/akhq:0.29.1
+    restart: unless-stopped
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            docker-kafka-server:
+              properties:
+                bootstrap.servers: "broker:29092"
+              schema-registry:
+                url: "http://schema-registry:8081"
+    ports:
+      - "9000:8080"
+    depends_on:
+      broker:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
 
 volumes:
   mongo_data:

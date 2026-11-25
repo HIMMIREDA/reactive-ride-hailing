@@ -27,6 +27,8 @@ public class SecurityConfig {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/api/users", "/api/users/auth").permitAll()
+                        // used by the docker compose healthcheck; only "health" is exposed
+                        .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtDecoder(jwtDecoder)));

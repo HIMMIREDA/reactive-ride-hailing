@@ -1,0 +1,6 @@
+# Active inside docker compose (SPRING_PROFILES_ACTIVE=docker): route to the service containers.
+# These feed the ${..._SERVICE_URL} placeholders in application.yaml (the route list itself is not
+# repeated here: a profile file would replace the whole list, not merge it).
+AUTH_SERVICE_URL: http://auth-service:8082
+RIDE_SERVICE_URL: http://ride-service:8083
+DRIVER_SERVICE_URL: http://driver-service:8084
