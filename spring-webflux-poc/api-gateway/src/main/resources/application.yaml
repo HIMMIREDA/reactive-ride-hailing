@@ -7,8 +7,10 @@ logging:
     org.springframework.web.server: DEBUG
 
 jwt:
-  secret: abscx12219kksjanxyauopax01n$bsbsbeqx!sq$hhbnbazazaz$snwas!=&$xw&és$!wxw$w
+  secret: ${JWT_SECRET:}  # required, no default: see .env.example
 spring:
+  config:
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   cloud:
     gateway:
       server:

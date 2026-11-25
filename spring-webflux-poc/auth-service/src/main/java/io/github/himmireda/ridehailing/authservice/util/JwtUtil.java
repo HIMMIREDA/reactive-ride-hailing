@@ -11,7 +11,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Component
@@ -25,7 +24,7 @@ public class JwtUtil {
 
     @PostConstruct
     private void init() {
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.secretKey = Keys.hmacShaKeyFor(JwtSecretValidator.requireValidSecret(secret));
     }
 
     public Mono<String> generateToken(UserEntity user) {
