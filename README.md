@@ -75,7 +75,7 @@ Prerequisites: Java 21, Maven, Docker with Docker Compose.
 mvn clean install -U
 
 cd spring-webflux-poc
-cp .env.example .env           # then set your own PostgreSQL user/password
+cp .env.example .env           # then set your PostgreSQL user/password and JWT_SECRET
 docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
 
 cd common
@@ -120,6 +120,7 @@ More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 - **Nearby requests = history + live feed.** driver-service first returns matching requests with a geospatial query, then follows new ones through a MongoDB change stream, and joins the two with `Flux.concat`. Change streams need a replica set, which is why Docker Compose starts MongoDB as a single-node replica set.
 - **Typed events.** Kafka events are Avro records registered in Schema Registry, generated in the `common` module and shared by all services.
 - **Each service owns its data.** ride-service keeps the rider's view in PostgreSQL; driver-service keeps its own copy in MongoDB, where geo queries and change streams are built in.
+- **The gateway is the only entry point.** api-gateway verifies the JWT, removes any identity headers sent by the client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) and sets them from the token's claims. auth-, ride- and driver-service trust these headers without checking anything, so they must never be reachable directly: anyone who can call them without going through the gateway can pick any identity. Keep them on a private network and expose only the gateway.
 
 ## TODO
 
@@ -129,3 +130,6 @@ More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 - [ ] **Share one change stream across drivers.** Each SSE connection opens its own MongoDB change stream. Plan: one shared stream fanned out to subscribers with `Sinks.many().multicast()`.
 - [ ] **Migrate off Reactor Kafka.** The project was discontinued in May 2025 and Spring Kafka's reactive templates are deprecated ([announcement](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Plan: plain Spring Kafka (`KafkaTemplate`, `@KafkaListener`) bridged to `Mono`/`Flux`.
 - [x] **Add automated tests.** Integration tests with Testcontainers (Kafka, PostgreSQL, MongoDB) and `StepVerifier` for the reactive pipelines.
+- [x] **Return 409 for invalid status transitions.** Accepting a ride request that is no longer `REQUESTED` returns 409 Conflict instead of 404 Not Found.
+- [x] **Test the gateway's authentication.** Missing, malformed, wrongly signed and expired tokens get 401; valid tokens are forwarded with identity headers, and identity headers sent by clients are dropped.
+- [x] **Move the JWT secret out of the code.** auth-service and api-gateway read it from the `JWT_SECRET` environment variable (or `.env`) and refuse to start if it is missing or shorter than 64 bytes.

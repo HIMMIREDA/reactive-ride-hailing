@@ -75,7 +75,7 @@ Pré-requis : Java 21, Maven, Docker avec Docker Compose.
 mvn clean install -U
 
 cd spring-webflux-poc
-cp .env.example .env           # puis choisissez votre utilisateur/mot de passe PostgreSQL
+cp .env.example .env           # puis choisissez votre utilisateur/mot de passe PostgreSQL et JWT_SECRET
 docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
 
 cd common
@@ -120,6 +120,7 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 - **Demandes proches = historique + flux en direct.** driver-service renvoie d'abord les demandes existantes via une requête géospatiale, puis suit les nouvelles via un change stream MongoDB, et enchaîne les deux avec `Flux.concat`. Les change streams nécessitent un replica set : c'est pourquoi Docker Compose démarre MongoDB en replica set à un seul nœud.
 - **Événements typés.** Les événements Kafka sont des enregistrements Avro déclarés dans le Schema Registry, générés dans le module `common` et partagés par tous les services.
 - **Chaque service possède ses données.** ride-service garde la vue passager dans PostgreSQL ; driver-service garde sa propre copie dans MongoDB, qui fournit nativement les requêtes géo et les change streams.
+- **La gateway est le seul point d'entrée.** api-gateway vérifie le JWT, supprime les en-têtes d'identité envoyés par le client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) et les remplit à partir des claims du token. auth-, ride- et driver-service font confiance à ces en-têtes sans rien vérifier : ils ne doivent donc jamais être joignables directement, sinon n'importe qui peut se faire passer pour n'importe quel utilisateur. Gardez-les sur un réseau privé et n'exposez que la gateway.
 
 ## TODO
 
@@ -129,3 +130,6 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 - [ ] **Partager un seul change stream entre les conducteurs.** Chaque connexion SSE ouvre son propre change stream MongoDB. Prévu : un flux unique diffusé aux abonnés avec `Sinks.many().multicast()`.
 - [ ] **Migrer hors de Reactor Kafka.** Le projet est arrêté depuis mai 2025 et les templates réactifs de Spring Kafka sont dépréciés ([annonce](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Prévu : Spring Kafka classique (`KafkaTemplate`, `@KafkaListener`) relié à `Mono`/`Flux`.
 - [x] **Ajouter des tests automatisés.** Tests d'intégration avec Testcontainers (Kafka, PostgreSQL, MongoDB) et `StepVerifier` pour les pipelines réactifs.
+- [x] **Renvoyer 409 pour les transitions de statut invalides.** Accepter une demande de course qui n'est plus `REQUESTED` renvoie 409 Conflict au lieu de 404 Not Found.
+- [x] **Tester l'authentification de la gateway.** Les tokens absents, malformés, mal signés ou expirés reçoivent 401 ; les tokens valides sont transmis avec les en-têtes d'identité, et les en-têtes d'identité envoyés par le client sont supprimés.
+- [x] **Sortir le secret JWT du code.** auth-service et api-gateway le lisent depuis la variable d'environnement `JWT_SECRET` (ou `.env`) et refusent de démarrer s'il est absent ou fait moins de 64 octets.

@@ -697,7 +697,7 @@ public class KafkaProducerConfig {
 mvn clean install -U # compile et installe tous les modules du projet en mettant à jour les dépendances
 
 cd spring-webflux-poc
-cp .env.example .env # puis choisissez votre utilisateur/mot de passe PostgreSQL
+cp .env.example .env # puis choisissez votre utilisateur/mot de passe PostgreSQL et JWT_SECRET
 docker compose up -d # démarre les services Docker (Kafka, PostgreSQL, MongoDB, Schema Registry, akhq etc.)
 
 cd common
