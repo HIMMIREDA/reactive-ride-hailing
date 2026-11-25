@@ -8,6 +8,7 @@ import io.github.himmireda.ridehailing.rideservice.dto.request.CreateRideRequest
 import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestNotFoundException;
+import io.github.himmireda.ridehailing.rideservice.exception.RideRequestStatusConflictException;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
 import io.github.himmireda.ridehailing.rideservice.mapper.RideRequestMapperImpl;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
@@ -204,17 +205,21 @@ class RideRequestServiceImplTest {
             verifyNoInteractions(acceptedProducer);
         }
 
-        // Current behaviour: a request that is no longer REQUESTED is reported as "not found" (404).
+        // The request exists but can no longer be accepted: 409 Conflict, not 404 Not Found.
         @ParameterizedTest
         @EnumSource(value = RideRequestStatus.class, names = {"ACCEPTED", "BOOKED"})
-        void requestNotInRequestedStatusFailsAndSendsNothing(RideRequestStatus status) {
+        void requestNotInRequestedStatusFailsWithConflictAndSendsNothing(RideRequestStatus status) {
             when(rideRequestRepository.findByRideRequestIdAndCustomerId(rideRequestId, customer.getCustomerId()))
                     .thenReturn(Mono.just(existingRequest(status)));
 
             StepVerifier.create(service.acceptRideProposal(customer, rideRequestId, request))
-                    .expectErrorSatisfies(error -> assertThat(error)
-                            .isInstanceOf(RideRequestNotFoundException.class)
-                            .hasMessageContaining("is not in REQUESTED status"))
+                    .expectErrorSatisfies(error -> {
+                        assertThat(error)
+                                .isInstanceOf(RideRequestStatusConflictException.class)
+                                .hasMessageContaining("is not in REQUESTED status")
+                                .hasMessageContaining("current status: " + status);
+                        assertThat(((RideRequestStatusConflictException) error).getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    })
                     .verify();
 
             verify(rideRequestRepository, never()).save(any());

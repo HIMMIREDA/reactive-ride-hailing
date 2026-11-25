@@ -112,6 +112,35 @@ class RideServiceIT {
     }
 
     @Test
+    void acceptingRequestThatIsNotRequestedReturns409() {
+        UUID customerId = UUID.randomUUID();
+        RideRequestEntity booked = rideRequestRepository.save(RideRequestEntity.builder()
+                        .customerId(customerId)
+                        .seats(1).preferredPrice(10)
+                        .startLat(33.2).startLng(20.2).endLat(50.1).endLng(20.1)
+                        .status(RideRequestStatus.BOOKED)
+                        .build())
+                .block(Duration.ofSeconds(5));
+
+        webTestClient.put().uri("/api/rides/{id}/accept", booked.getRideRequestId())
+                .header("X-User-Id", customerId.toString())
+                .header("X-Role", "USER")
+                .header("X-Email", "rider@example.com")
+                .header("X-First-Name", "Ada")
+                .header("X-Last-Name", "Lovelace")
+                .header("X-Phone-Number", "0600000001")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("rideProposalId", UUID.randomUUID().toString()))
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody().jsonPath("$.status").isEqualTo(409);
+
+        // Nothing changed: the request is still BOOKED.
+        assertThat(rideRequestRepository.findById(booked.getRideRequestId()).block(Duration.ofSeconds(5)).getStatus())
+                .isEqualTo(RideRequestStatus.BOOKED);
+    }
+
+    @Test
     void consumingBookedEventMarksAcceptedRequestBooked() {
         // Arrange: a request the rider has already accepted (inserted directly, independent of other tests).
         RideRequestEntity accepted = rideRequestRepository.save(RideRequestEntity.builder()
