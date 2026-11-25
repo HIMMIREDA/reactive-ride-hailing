@@ -15,6 +15,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +41,21 @@ public final class AvroKafkaTestClient {
     }
 
     public static void send(String bootstrapServers, String topic, String key, SpecificRecord value) {
+        send(bootstrapServers, topic, key, value, Map.of());
+    }
+
+    /** Sends with record headers, e.g. the "event-id" header the outbox relay sets. */
+    public static void send(String bootstrapServers, String topic, String key, SpecificRecord value,
+                            Map<String, String> headers) {
         Map<String, Object> config = Map.of(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class,
                 KafkaAvroDeserializerConfig.SCHEMA_REGISTRY_URL_CONFIG, SCHEMA_REGISTRY_URL);
         try (KafkaProducer<String, SpecificRecord> producer = new KafkaProducer<>(config)) {
-            producer.send(new ProducerRecord<>(topic, key, value)).get();
+            ProducerRecord<String, SpecificRecord> record = new ProducerRecord<>(topic, key, value);
+            headers.forEach((name, headerValue) -> record.headers().add(name, headerValue.getBytes(StandardCharsets.UTF_8)));
+            producer.send(record).get();
         } catch (Exception e) {
             throw new IllegalStateException("Could not send test event to " + topic, e);
         }
@@ -91,10 +100,41 @@ public final class AvroKafkaTestClient {
         }
     }
 
+    /**
+     * Reads the whole topic from the beginning and keeps polling until no new record arrived for
+     * {@code quietPeriod} (and at least {@code expectedAtLeast} were read, or 60 s passed).
+     */
+    public static List<ConsumerRecord<String, byte[]>> readAll(String bootstrapServers, String topic,
+                                                              int expectedAtLeast, Duration quietPeriod) {
+        Map<String, Object> config = Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                ConsumerConfig.GROUP_ID_CONFIG, "test-" + UUID.randomUUID(),
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
+        List<ConsumerRecord<String, byte[]>> records = new java.util.ArrayList<>();
+        try (KafkaConsumer<String, byte[]> consumer = new KafkaConsumer<>(config)) {
+            consumer.subscribe(List.of(topic));
+            long deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+            long lastNew = System.nanoTime();
+            while (System.nanoTime() < deadline) {
+                int before = records.size();
+                consumer.poll(Duration.ofMillis(250)).forEach(records::add);
+                if (records.size() > before) {
+                    lastNew = System.nanoTime();
+                }
+                if (records.size() >= expectedAtLeast && System.nanoTime() - lastNew > quietPeriod.toNanos()) {
+                    break;
+                }
+            }
+        }
+        return records;
+    }
+
     /** Value of a record header as a string, or null. */
     public static String header(ConsumerRecord<?, ?> record, String name) {
         var header = record.headers().lastHeader(name);
-        return header == null ? null : new String(header.value(), java.nio.charset.StandardCharsets.UTF_8);
+        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
     /**

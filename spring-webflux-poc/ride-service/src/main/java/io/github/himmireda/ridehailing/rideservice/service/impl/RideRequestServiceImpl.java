@@ -12,9 +12,9 @@ import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestNotFoundException;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestStatusConflictException;
-import io.github.himmireda.ridehailing.rideservice.kafka.EventPublisher;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
 import io.github.himmireda.ridehailing.rideservice.mapper.RideRequestMapper;
+import io.github.himmireda.ridehailing.rideservice.outbox.OutboxWriter;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
 import io.github.himmireda.ridehailing.rideservice.service.RideRequestService;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +41,8 @@ public class RideRequestServiceImpl implements RideRequestService {
     private final RideRequestRepository rideRequestRepository;
     private final RideRequestMapper rideRequestMapper;
     private final RideProposalSinkManager rideProposalSinkManager;
-    private final EventPublisher eventPublisher;
+    // Events go to the outbox, in the same transaction as the ride row; OutboxRelay publishes them.
+    private final OutboxWriter outboxWriter;
 
 
 
@@ -70,7 +71,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                                     .setCustomerPhoneNumber(customerInternalDto.getCustomerPhoneNumber())
                                     .build();
 
-                            return eventPublisher.publish(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
+                            String rideRequestId = rideRequest.getRideRequestId().toString();
+                            return outboxWriter.append(rideRequestRequestedTopicName, rideRequestId, rideRequestId, event)
                                     .thenReturn(rideRequest)
                                     .log();
                         }
@@ -100,7 +102,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                             .setRideRequestId(rideRequestEntity.getRideRequestId().toString())
                             .setRideProposalId(requestDto.getRideProposalId().toString())
                             .build();
-                    return eventPublisher.publish(rideProposalAcceptedTopicName, rideRequestEntity.getRideRequestId().toString(), event)
+                    String aggregateId = rideRequestEntity.getRideRequestId().toString();
+                    return outboxWriter.append(rideProposalAcceptedTopicName, aggregateId, aggregateId, event)
                             .thenReturn(rideRequestEntity)
                             .log();
                 })

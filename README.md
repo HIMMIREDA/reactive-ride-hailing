@@ -130,9 +130,34 @@ More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 - **Each service owns its data.** ride-service keeps the rider's view in PostgreSQL; driver-service keeps its own copy in MongoDB, where geo queries and change streams are built in.
 - **The gateway is the only entry point.** api-gateway verifies the JWT, removes any identity headers sent by the client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) and sets them from the token's claims. auth-, ride- and driver-service trust these headers without checking anything, so they must never be reachable directly: anyone who can call them without going through the gateway can pick any identity. Keep them on a private network and expose only the gateway: `docker compose` does exactly that, only the gateway (and AKHQ) publish ports.
 
+## Reliability
+
+```mermaid
+flowchart LR
+    subgraph RS[ride-service]
+        API["POST /api/rides<br/>PUT /api/rides/{id}/accept"] -->|one transaction| PG[("ride_requests<br/>+ outbox")]
+        RELAY1["outbox relay<br/>FOR UPDATE SKIP LOCKED"] -->|poll batch| PG
+    end
+    subgraph DS[driver-service]
+        L["@KafkaListener<br/>returns Mono"] -->|one transaction| MG[("processed_events<br/>+ ride_requests<br/>+ outbox")]
+        RELAY2["outbox relay<br/>findAndModify claim"] -->|claim| MG
+    end
+    RELAY1 -->|"publish, header event-id"| K{{Kafka}}
+    RELAY2 -->|"publish, header event-id"| K
+    K --> L
+    K -->|"after retries / poison"| DLT[("&lt;topic&gt;.DLT")]
+```
+
+- **No dual write.** A service never sends to Kafka in the request path. It writes the event to an `outbox` table (PostgreSQL) or collection (MongoDB) in the **same transaction** as the business change, so the change and its event are committed together or not at all. The API keeps working while Kafka is down; the events wait in the outbox.
+- **Outbox relay.** A background loop in each service publishes the outbox in order, puts the event id in an `event-id` header and marks the row published only after Kafka acknowledged it. On failure it stops the batch and backs off exponentially. Several instances can run side by side: PostgreSQL rows are locked with `SELECT ... FOR UPDATE SKIP LOCKED` (an instance skips rows another one holds), MongoDB documents are claimed with an atomic `findAndModify` and a lease.
+- **At-least-once.** If a relay dies after Kafka's ack but before marking the row, the event is published again. Kafka consumer retries and redeliveries also produce duplicates. So every consumer is idempotent.
+- **Idempotent consumers.** Each listener records `(event id, consumer)` in a `processed_events` table/collection in the same transaction as the state change, and skips an event it has already processed. I chose this over relying only on guarded state transitions (`ACCEPTED -> BOOKED`) because it is explicit, covers events that are not transitions (storing a new request), and stays correct when two deliveries of the same event are processed concurrently (async listeners do that). The status guards remain as a second line of defence.
+- **Ordering.** Within one relay, events are published in commit order. With several relays, or with retries, a later event can overtake an earlier one; consumers tolerate it (an event about an unknown request is retried, then dead-lettered).
+- **Why polling and not CDC.** The alternative is change data capture: Debezium reads the PostgreSQL WAL / MongoDB oplog and publishes outbox rows through Kafka Connect, with lower latency and no polling queries. It also needs Kafka Connect, Debezium connectors, logical replication settings and their monitoring. For this project a polling relay is a few dozen lines, runs inside the service, works the same in Docker Compose, CI and Testcontainers, and its sub-second latency is fine. At higher volume, Debezium's outbox event router would be the next step.
+
 ## TODO
 
-- [ ] **Make database and Kafka writes atomic.** Services save to the database, then publish to Kafka. `@Transactional` only covers the database, so a crash or a Kafka error between the two steps loses the event. Plan: transactional outbox pattern.
+- [x] **Make database and Kafka writes atomic.** Transactional outbox in ride-service (PostgreSQL) and driver-service (MongoDB transaction), published by a polling relay; consumers are idempotent. See [Reliability](#reliability).
 - [x] **Acknowledge offsets after the follow-up event is sent.** Listeners return a `Mono` and the offset is committed only when it completes, i.e. after the booked event is acknowledged by Kafka. An event about an unknown request or offer is logged, retried and sent to its dead-letter topic instead of being skipped.
 - [x] **Add error recovery to the Kafka consumers.** Failures are retried with exponential backoff, then the record goes to `<topic>.DLT`; records that can't be deserialized go straight to the DLT. One bad record no longer stops consumption.
 - [ ] **Share one change stream across drivers.** Each SSE connection opens its own MongoDB change stream. Plan: one shared stream fanned out to subscribers with `Sinks.many().multicast()`.

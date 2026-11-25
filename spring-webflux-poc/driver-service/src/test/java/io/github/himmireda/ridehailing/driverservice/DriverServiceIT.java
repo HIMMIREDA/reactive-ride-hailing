@@ -10,7 +10,20 @@ import io.github.himmireda.ridehailing.driverservice.repository.RideProposalRepo
 import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepository;
 import io.github.himmireda.ridehailing.driverservice.support.AvroKafkaTestClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import io.github.himmireda.ridehailing.driverservice.kafka.EventPublisher;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxDocument;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxProperties;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxRelay;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxWriter;
+import io.github.himmireda.ridehailing.messaging.EventHeaders;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +39,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
@@ -62,6 +76,10 @@ class DriverServiceIT {
         registry.add("spring.kafka.properties.auto.register.schemas", () -> true);
         registry.add("app.kafka.retry.initial-interval", () -> "100ms");
         registry.add("app.kafka.retry.max-interval", () -> "500ms");
+        registry.add("app.outbox.poll-interval", () -> "200ms");
+        registry.add("app.outbox.batch-size", () -> "5");
+        registry.add("app.outbox.initial-backoff", () -> "200ms");
+        registry.add("app.outbox.max-backoff", () -> "1s");
     }
 
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT = new ParameterizedTypeReference<>() {};
@@ -72,6 +90,16 @@ class DriverServiceIT {
     private RideRequestRepository rideRequestRepository;
     @Autowired
     private RideProposalRepository rideProposalRepository;
+    @Autowired
+    private ReactiveMongoTemplate mongoTemplate;
+    @Autowired
+    private OutboxWriter outboxWriter;
+    @Autowired
+    private OutboxRelay outboxRelay;
+    @Autowired
+    private OutboxProperties outboxProperties;
+    @Autowired
+    private EventPublisher eventPublisher;
 
     @Value("${kafka.topics.ride-request-requested}")
     private String rideRequestRequestedTopic;
@@ -190,6 +218,10 @@ class DriverServiceIT {
                 kafka.getBootstrapServers(), rideProposalBookedTopic,
                 r -> r.value().getRideRequestId().toString().equals(rideRequestId));
         assertThat(booked.key()).isEqualTo(rideProposalId);
+        // Published by the outbox relay: the event id header is the outbox document id.
+        OutboxDocument outbox = mongoTemplate.findOne(Query.query(Criteria.where("aggregateId").is(rideRequestId)
+                .and("eventType").is(RideProposalBookedEvent.getClassSchema().getFullName())), OutboxDocument.class).block();
+        assertThat(AvroKafkaTestClient.header(booked, EventHeaders.EVENT_ID)).isEqualTo(outbox.getId());
         assertThat(booked.value().getRideProposalId()).hasToString(rideProposalId);
         assertThat(booked.value().getDriverId()).hasToString(driverId);
         assertThat(booked.value().getPrice()).isEqualTo(15.5);
@@ -214,6 +246,80 @@ class DriverServiceIT {
         // Nothing was booked.
         assertThat(rideRequestRepository.findById(rideRequestId).block(Duration.ofSeconds(5)).getStatus())
                 .isEqualTo(RideRequestStatus.REQUESTED);
+    }
+
+    @Nested
+    class TransactionalOutbox {
+
+        @Test
+        void twoRelayInstancesPublishEachEventExactlyOnce() {
+            String topic = "outbox-relay-it-" + UUID.randomUUID();
+            int events = 40;
+            IntStream.range(0, events).forEach(i -> outboxWriter.append(topic, "key-" + i, "aggregate-" + i,
+                    RideProposalAcceptedEvent.newBuilder()
+                            .setRideRequestId("ride-" + i)
+                            .setRideProposalId("proposal-" + i)
+                            .build()).block(Duration.ofSeconds(5)));
+
+            // A second relay, like a second driver-service instance, claiming from the same collection.
+            OutboxRelay secondRelay = new OutboxRelay("second-relay", mongoTemplate, eventPublisher, outboxProperties);
+            long firstBefore = outboxRelay.publishedCount();
+            secondRelay.start();
+            try {
+                await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> assertThat(mongoTemplate.count(
+                        Query.query(Criteria.where("topic").is(topic).and("publishedAt").is(null)), OutboxDocument.class)
+                        .block()).isZero());
+            } finally {
+                secondRelay.stop();
+            }
+
+            List<ConsumerRecord<String, byte[]>> records = AvroKafkaTestClient.readAll(
+                    kafka.getBootstrapServers(), topic, events, Duration.ofSeconds(3));
+            Map<String, Long> perEventId = records.stream().collect(Collectors.groupingBy(
+                    r -> AvroKafkaTestClient.header(r, EventHeaders.EVENT_ID), Collectors.counting()));
+            assertThat(perEventId).hasSize(events);
+            assertThat(perEventId.values()).allMatch(count -> count == 1L);
+            System.out.printf("relays shared the work: first=%d second=%d%n",
+                    outboxRelay.publishedCount() - firstBefore, secondRelay.publishedCount());
+        }
+    }
+
+    @Nested
+    class IdempotentConsumers {
+
+        @Test
+        void sameAcceptedEventDeliveredTwiceBooksOnce() {
+            String rideRequestId = UUID.randomUUID().toString();
+            String rideProposalId = UUID.randomUUID().toString();
+            rideRequestRepository.save(requestedRideAt(rideRequestId, -10.0, -30.0)).block(Duration.ofSeconds(5));
+            rideProposalRepository.save(RideProposalEntity.builder()
+                    .rideProposalId(rideProposalId).rideRequestId(rideRequestId).price(20)
+                    .driverId(UUID.randomUUID().toString()).driverEmail("driver@example.com")
+                    .driverFirstName("Grace").driverLastName("Hopper").driverPhoneNumber("0600000002")
+                    .build()).block(Duration.ofSeconds(5));
+            String eventId = UUID.randomUUID().toString();
+            RideProposalAcceptedEvent accepted = RideProposalAcceptedEvent.newBuilder()
+                    .setRideRequestId(rideRequestId).setRideProposalId(rideProposalId).build();
+
+            // At-least-once delivery: the same event (same id) arrives twice, back to back.
+            for (int delivery = 0; delivery < 2; delivery++) {
+                AvroKafkaTestClient.send(kafka.getBootstrapServers(), rideProposalAcceptedTopic, rideRequestId,
+                        accepted, Map.of(EventHeaders.EVENT_ID, eventId));
+            }
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                    assertThat(rideRequestRepository.findById(rideRequestId).block().getStatus())
+                            .isEqualTo(RideRequestStatus.BOOKED));
+            // Exactly one booked event was written to the outbox, and one processed-event marker exists.
+            Query bookedForRide = Query.query(Criteria.where("aggregateId").is(rideRequestId)
+                    .and("eventType").is(RideProposalBookedEvent.getClassSchema().getFullName()));
+            await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(mongoTemplate.count(bookedForRide, OutboxDocument.class).block()).isEqualTo(1L);
+                assertThat(mongoTemplate.getCollection("processed_events")
+                        .flatMap(c -> Mono.from(c.countDocuments(new org.bson.Document("eventId", eventId)))).block())
+                        .isEqualTo(1L);
+            });
+        }
     }
 
     private static RideRequestEntity requestedRideAt(String id, double lat, double lng) {

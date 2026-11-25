@@ -9,9 +9,9 @@ import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestNotFoundException;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestStatusConflictException;
-import io.github.himmireda.ridehailing.rideservice.kafka.EventPublisher;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
 import io.github.himmireda.ridehailing.rideservice.mapper.RideRequestMapperImpl;
+import io.github.himmireda.ridehailing.rideservice.outbox.OutboxWriter;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -59,7 +59,7 @@ class RideRequestServiceImplTest {
     @Mock
     private RideProposalSinkManager rideProposalSinkManager;
     @Mock
-    private EventPublisher eventPublisher;
+    private OutboxWriter outboxWriter;
 
     private RideRequestServiceImpl service;
 
@@ -75,7 +75,7 @@ class RideRequestServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new RideRequestServiceImpl(rideRequestRepository, new RideRequestMapperImpl(),
-                rideProposalSinkManager, eventPublisher);
+                rideProposalSinkManager, outboxWriter);
         // The topic names are @Value fields, which only Spring fills in.
         ReflectionTestUtils.setField(service, "rideRequestRequestedTopicName", REQUESTED_TOPIC);
         ReflectionTestUtils.setField(service, "rideProposalAcceptedTopicName", ACCEPTED_TOPIC);
@@ -83,11 +83,11 @@ class RideRequestServiceImplTest {
 
     /**
      * A PublisherProbe wraps a Mono and records whether it was subscribed to. Asserting
-     * {@code wasSubscribed()} catches a classic reactive bug: building the "send" Mono but
-     * never chaining it, so nothing is actually sent.
+     * {@code wasSubscribed()} catches a classic reactive bug: building the "write to outbox" Mono but
+     * never chaining it, so the event is silently lost.
      */
-    private static PublisherProbe<Void> sendProbe() {
-        return PublisherProbe.empty();
+    private static PublisherProbe<UUID> outboxProbe() {
+        return PublisherProbe.of(Mono.just(UUID.randomUUID()));
     }
 
     @Nested
@@ -108,8 +108,8 @@ class RideRequestServiceImplTest {
                 entity.setCreatedAt(LocalDateTime.of(2026, 1, 1, 10, 0));
                 return Mono.just(entity);
             });
-            PublisherProbe<Void> send = sendProbe();
-            when(eventPublisher.publish(anyString(), anyString(), any(RideRequestRequestedEvent.class)))
+            PublisherProbe<UUID> send = outboxProbe();
+            when(outboxWriter.append(anyString(), anyString(), anyString(), any(RideRequestRequestedEvent.class)))
                     .thenReturn(send.mono());
 
             StepVerifier.create(service.createRideRequest(customer, request))
@@ -126,7 +126,7 @@ class RideRequestServiceImplTest {
             assertThat(saved.getValue().getCustomerId()).isEqualTo(customer.getCustomerId());
 
             ArgumentCaptor<RideRequestRequestedEvent> event = ArgumentCaptor.forClass(RideRequestRequestedEvent.class);
-            verify(eventPublisher).publish(eq(REQUESTED_TOPIC), eq(generatedId.toString()), event.capture());
+            verify(outboxWriter).append(eq(REQUESTED_TOPIC), eq(generatedId.toString()), eq(generatedId.toString()), event.capture());
             assertThat(event.getValue().getRideRequestId()).hasToString(generatedId.toString());
             assertThat(event.getValue().getCustomerId()).hasToString(customer.getCustomerId().toString());
             assertThat(event.getValue().getCustomerEmail()).hasToString("rider@example.com");
@@ -161,8 +161,8 @@ class RideRequestServiceImplTest {
                     .thenReturn(Mono.just(existingRequest(RideRequestStatus.REQUESTED)));
             when(rideRequestRepository.save(any(RideRequestEntity.class)))
                     .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-            PublisherProbe<Void> send = sendProbe();
-            when(eventPublisher.publish(anyString(), anyString(), any(RideProposalAcceptedEvent.class)))
+            PublisherProbe<UUID> send = outboxProbe();
+            when(outboxWriter.append(anyString(), anyString(), anyString(), any(RideProposalAcceptedEvent.class)))
                     .thenReturn(send.mono());
 
             StepVerifier.create(service.acceptRideProposal(customer, rideRequestId, request))
@@ -177,7 +177,7 @@ class RideRequestServiceImplTest {
             assertThat(saved.getValue().getStatus()).isEqualTo(RideRequestStatus.ACCEPTED);
 
             ArgumentCaptor<RideProposalAcceptedEvent> event = ArgumentCaptor.forClass(RideProposalAcceptedEvent.class);
-            verify(eventPublisher).publish(eq(ACCEPTED_TOPIC), eq(rideRequestId.toString()), event.capture());
+            verify(outboxWriter).append(eq(ACCEPTED_TOPIC), eq(rideRequestId.toString()), eq(rideRequestId.toString()), event.capture());
             assertThat(event.getValue().getRideRequestId()).hasToString(rideRequestId.toString());
             assertThat(event.getValue().getRideProposalId()).hasToString(rideProposalId.toString());
             send.assertWasSubscribed();
@@ -196,7 +196,7 @@ class RideRequestServiceImplTest {
                     .verify();
 
             verify(rideRequestRepository, never()).save(any());
-            verifyNoInteractions(eventPublisher);
+            verifyNoInteractions(outboxWriter);
         }
 
         // The request exists but can no longer be accepted: 409 Conflict, not 404 Not Found.
@@ -217,7 +217,7 @@ class RideRequestServiceImplTest {
                     .verify();
 
             verify(rideRequestRepository, never()).save(any());
-            verifyNoInteractions(eventPublisher);
+            verifyNoInteractions(outboxWriter);
         }
     }
 }

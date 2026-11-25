@@ -34,6 +34,7 @@
     - [7.2 Integration with Spring Data R2DBC](#72-integration-with-spring-data-r2dbc)
     - [7.3 Reactor Kafka (history)](#73-reactor-kafka-history)
     - [7.4 Kafka with plain Spring Kafka in a reactive application](#74-kafka-with-plain-spring-kafka-in-a-reactive-application)
+    - [7.5 Reliability: transactional outbox and idempotent consumers](#75-reliability-transactional-outbox-and-idempotent-consumers)
   - [8. Hands-on POC](#8-hands-on-poc)
   - [8.1 Prerequisites](#81-prerequisites)
   - [8.2 Running the POC](#82-running-the-poc)
@@ -639,6 +640,21 @@ Since Spring Kafka 3.2, a listener can return a `Mono` (async listener): the con
 * Either way the `Mono` completes, the offset is committed and the next record is processed: one bad record never stops consumption, and nothing is skipped silently (an event about an unknown request or offer is logged, retried, then dead-lettered).
 * Trade-off: an async listener does not wait for one record before starting the next, so records of a partition can be processed out of order (and a retried record is overtaken). Consumers must therefore be idempotent and tolerate reordering.
 
+### 7.5 Reliability: transactional outbox and idempotent consumers
+Writing to the database and then sending to Kafka is a *dual write*: a crash or a Kafka outage between the two loses the event. The services therefore write each event to an **outbox** (a table in PostgreSQL, a collection in MongoDB) in the **same reactive transaction** as the business change:
+
+```java
+@Transactional
+public Mono<CreateRideRequestResponseDto> createRideRequest(CustomerInternalDto customer, CreateRideRequestRequestDto request) {
+    return rideRequestRepository.save(entity)                                     // business row
+            .flatMap(ride -> outboxWriter.append(topic, key, aggregateId, event)  // outbox row, same transaction
+                    .thenReturn(ride))
+            .map(rideRequestMapper::mapToCreateRideRequestResponseDto);
+}
+```
+
+A background **relay** publishes the outbox with `KafkaTemplate` and marks each entry published after Kafka's ack (PostgreSQL: `SELECT ... FOR UPDATE SKIP LOCKED`; MongoDB: atomic `findAndModify` claim). Delivery is at-least-once, so consumers record the `event-id` header in a `processed_events` table/collection in the same transaction as their state change and skip duplicates. The README's [Reliability](README.md#reliability) section has the diagram and the trade-offs (ordering, Debezium/CDC).
+
 ## 8. Hands-on POC
 
 ## 8.1 Prerequisites
@@ -805,8 +821,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                             .build();
 
                     // Publish the event
-                    return eventPublisher
-                            .publish(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
+                    return outboxWriter
+                            .append(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), rideRequest.getRideRequestId().toString(), event) // outbox, same transaction
                             .thenReturn(rideRequest);
                 })
                 .map(rideRequestMapper::mapToCreateRideRequestResponseDto);
@@ -873,8 +889,8 @@ public class RideProposalServiceImpl implements RideProposalService {
                             .setPrice(proposal.getPrice())
                             // ... other fields ...
                             .build();
-                    return eventPublisher
-                            .publish(rideProposalProposedTopicName, proposal.getRideProposalId(), event)
+                    return outboxWriter
+                            .append(rideProposalProposedTopicName, proposal.getRideProposalId(), proposal.getRideProposalId(), event) // outbox, same transaction
                             .thenReturn(proposal);
                 })
                 .map(rideProposalMapper::mapToProposeRideProposalResponseDto);
@@ -909,8 +925,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                             .setRideRequestId(rideRequest.getRideRequestId().toString())
                             .setRideProposalId(requestDto.getRideProposalId().toString())
                             .build();
-                    return eventPublisher
-                            .publish(rideProposalAcceptedTopicName, rideRequest.getRideRequestId().toString(), event)
+                    return outboxWriter
+                            .append(rideProposalAcceptedTopicName, rideRequest.getRideRequestId().toString(), rideRequest.getRideRequestId().toString(), event) // outbox, same transaction
                             .thenReturn(rideRequest);
                 })
                 .map(rideRequestMapper::mapToAcceptRideProposalResponseDto);
@@ -926,7 +942,7 @@ public class RideRequestServiceImpl implements RideRequestService {
 public class RideProposalAcceptedEventConsumer {
     private final RideRequestRepository rideRequestRepository;
     private final RideProposalRepository rideProposalRepository;
-    private final EventPublisher eventPublisher;
+    private final OutboxWriter outboxWriter;
     private final ResilientRecordProcessor resilientRecordProcessor;
 
     // 1. Async listener: the offset is committed only when the returned Mono completes
@@ -937,6 +953,7 @@ public class RideProposalAcceptedEventConsumer {
         String rideProposalId = event.getRideProposalId().toString();
 
         // 2. Retries with backoff, then dead-letter topic: a failure never stops consumption
+        // (the real listener also records the event id in processed_events, in the same transaction)
         return resilientRecordProcessor.process(record, () -> Mono.zip(
                         // 3. Load the request and the offer; a missing one is an error (retried, then DLT)
                         rideRequestRepository.findById(rideRequestId)
@@ -949,10 +966,10 @@ public class RideProposalAcceptedEventConsumer {
                     // 4. Update the request status
                     rideRequest.setStatus(RideRequestStatus.BOOKED);
                     rideRequest.setAcceptedRideProposalId(rideProposal.getRideProposalId());
-                    // 5. Save, then publish the booked event; the offset is committed after both
+                    // 5. Save + booked event in the outbox, one MongoDB transaction (the relay publishes it)
                     return rideRequestRepository.save(rideRequest)
-                            .then(eventPublisher.publish(rideProposalBookedTopic, rideProposal.getRideProposalId(),
-                                    buildBookedEvent(rideRequest, rideProposal)));
+                            .then(outboxWriter.append(rideProposalBookedTopic, rideProposal.getRideProposalId(),
+                                    rideRequestId, buildBookedEvent(rideRequest, rideProposal)));
                 })
                 .then());
     }

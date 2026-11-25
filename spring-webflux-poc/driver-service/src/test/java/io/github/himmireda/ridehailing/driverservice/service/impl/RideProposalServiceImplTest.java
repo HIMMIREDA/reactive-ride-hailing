@@ -7,8 +7,8 @@ import io.github.himmireda.ridehailing.driverservice.entity.RideProposalEntity;
 import io.github.himmireda.ridehailing.driverservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.driverservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.driverservice.exception.RideRequestNotFoundException;
-import io.github.himmireda.ridehailing.driverservice.kafka.EventPublisher;
 import io.github.himmireda.ridehailing.driverservice.mapper.RideProposalMapperImpl;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxWriter;
 import io.github.himmireda.ridehailing.driverservice.repository.RideProposalRepository;
 import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +43,7 @@ class RideProposalServiceImplTest {
     @Mock
     private RideRequestRepository rideRequestRepository;
     @Mock
-    private EventPublisher eventPublisher;
+    private OutboxWriter outboxWriter;
 
     private RideProposalServiceImpl service;
 
@@ -64,7 +64,7 @@ class RideProposalServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new RideProposalServiceImpl(rideProposalRepository, rideRequestRepository,
-                new RideProposalMapperImpl(), eventPublisher);
+                new RideProposalMapperImpl(), outboxWriter);
         ReflectionTestUtils.setField(service, "rideProposalProposedTopicName", PROPOSED_TOPIC);
     }
 
@@ -75,8 +75,8 @@ class RideProposalServiceImplTest {
                         .rideRequestId(rideRequestId).status(RideRequestStatus.REQUESTED).build()));
         when(rideProposalRepository.save(any(RideProposalEntity.class)))
                 .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        PublisherProbe<Void> send = PublisherProbe.empty();
-        when(eventPublisher.publish(anyString(), anyString(), any(RideProposalProposedEvent.class)))
+        PublisherProbe<String> send = PublisherProbe.of(Mono.just(UUID.randomUUID().toString()));
+        when(outboxWriter.append(anyString(), anyString(), anyString(), any(RideProposalProposedEvent.class)))
                 .thenReturn(send.mono());
 
         StepVerifier.create(service.proposeRideProposal(driver, request))
@@ -96,7 +96,7 @@ class RideProposalServiceImplTest {
         assertThat(proposal.getDriverEmail()).isEqualTo("driver@example.com");
 
         ArgumentCaptor<RideProposalProposedEvent> event = ArgumentCaptor.forClass(RideProposalProposedEvent.class);
-        verify(eventPublisher).publish(eq(PROPOSED_TOPIC), eq(proposal.getRideProposalId()), event.capture());
+        verify(outboxWriter).append(eq(PROPOSED_TOPIC), eq(proposal.getRideProposalId()), eq(rideRequestId), event.capture());
         assertThat(event.getValue().getRideProposalId()).hasToString(proposal.getRideProposalId());
         assertThat(event.getValue().getRideRequestId()).hasToString(rideRequestId);
         assertThat(event.getValue().getDriverId()).hasToString(driver.getDriverId().toString());
@@ -117,6 +117,6 @@ class RideProposalServiceImplTest {
                 .verify();
 
         verify(rideProposalRepository, never()).save(any());
-        verifyNoInteractions(eventPublisher);
+        verifyNoInteractions(outboxWriter);
     }
 }
