@@ -688,33 +688,12 @@ public class KafkaProducerConfig {
 
 ## 8.1 Prerequisites
 
-1.  Java 21 & Maven
-2.  Docker & Docker Compose
+1.  Docker with Compose v2 and Buildx
+2.  Java 21 & Maven (only to run the tests or a service outside Docker)
 
 ## 8.2 Running the POC
 
-```bash
-mvn clean install -U # builds and installs every module, updating dependencies
-
-cd spring-webflux-poc
-cp .env.example .env # then set your PostgreSQL user/password and JWT_SECRET
-docker compose up -d # starts the Docker services (Kafka, PostgreSQL, MongoDB, Schema Registry, AKHQ, etc.)
-
-cd common
-mvn schema-registry:register # registers the schemas in Schema Registry. If it fails, retry after a few seconds.
-
-cd ../auth-service
-mvn spring-boot:run
-
-cd ../ride-service
-mvn spring-boot:run
-
-cd ../driver-service
-mvn spring-boot:run
-
-cd ../api-gateway
-mvn spring-boot:run
-```
+See [Running it locally](README.md#running-it-locally) in the README: copy `.env`, set `JWT_SECRET`, run `docker compose up --build`, then `scripts/smoke-test.sh`. It also explains how to run a single service from your IDE.
 
 ## 8.3 Technologies used
 

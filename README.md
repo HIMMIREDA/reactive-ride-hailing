@@ -69,26 +69,33 @@ sequenceDiagram
 
 ## Running it locally
 
-Prerequisites: Java 21, Maven, Docker with Docker Compose.
+Prerequisites: Docker with Compose v2 and Buildx (both included in Docker Desktop and in the docker-ce packages; on some Linux distributions Buildx is a separate package such as `docker-buildx`). Java 21 and Maven are only needed to run the tests or a service outside Docker.
 
 ```bash
-mvn clean install -U
-
 cd spring-webflux-poc
-cp .env.example .env           # then set your PostgreSQL user/password and JWT_SECRET
-docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
-
-cd common
-mvn schema-registry:register   # registers the Avro schemas; retry after a few seconds if it fails
-
-# then start each service in its own terminal
-cd ../auth-service   && mvn spring-boot:run
-cd ../ride-service   && mvn spring-boot:run
-cd ../driver-service && mvn spring-boot:run
-cd ../api-gateway    && mvn spring-boot:run
+cp .env.example .env
+# set JWT_SECRET in .env (PostgreSQL credentials too, if you like):
+#   JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')
+docker compose up --build      # or: docker compose up -d --build --wait
 ```
 
-Local ports: API gateway 8085, AKHQ 9000, Schema Registry 8081, Kafka 9092, PostgreSQL 15432, MongoDB 27017.
+Compose builds the four service images, starts PostgreSQL, MongoDB (replica set), Kafka, Schema Registry and AKHQ, registers the Avro schemas (one-shot `schema-init` container), and starts each service only once what it depends on is healthy. The first build downloads the Maven dependencies; later builds reuse a BuildKit cache.
+
+Once everything is healthy, run the end-to-end smoke test from the repository root (needs `curl` and `jq`). It signs up a rider and a driver, creates a ride, sends and accepts an offer, and checks that the ride ends `BOOKED`:
+
+```bash
+scripts/smoke-test.sh
+```
+
+Published ports: API gateway http://localhost:8085 and AKHQ http://localhost:9000. Nothing else is reachable from the host (see [Design choices](#design-choices)). To reach a database, Kafka, Schema Registry or a service directly while debugging, copy `spring-webflux-poc/docker-compose.override.example.yml` to `docker-compose.override.yml` (gitignored); the file explains what it opens.
+
+### Run a service from your IDE
+
+1. `cp docker-compose.override.example.yml docker-compose.override.yml`, then `docker compose up -d` (publishes the infrastructure ports the services use by default).
+2. `docker compose stop ride-service` (the service you want to work on).
+3. Run it from your IDE or with `mvn spring-boot:run` in its module, without the `docker` profile: it uses `localhost` and reads `spring-webflux-poc/.env`.
+
+The gateway container still routes to the `ride-service` container name. To send traffic through a gateway to your IDE instance, run `api-gateway` from the IDE as well (its defaults point at `localhost:8082`-`8084`).
 
 A Postman collection is included: `spring-webflux-poc/poc-spring-webflux.postman_collection.json`.
 
@@ -120,7 +127,7 @@ More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 - **Nearby requests = history + live feed.** driver-service first returns matching requests with a geospatial query, then follows new ones through a MongoDB change stream, and joins the two with `Flux.concat`. Change streams need a replica set, which is why Docker Compose starts MongoDB as a single-node replica set.
 - **Typed events.** Kafka events are Avro records registered in Schema Registry, generated in the `common` module and shared by all services.
 - **Each service owns its data.** ride-service keeps the rider's view in PostgreSQL; driver-service keeps its own copy in MongoDB, where geo queries and change streams are built in.
-- **The gateway is the only entry point.** api-gateway verifies the JWT, removes any identity headers sent by the client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) and sets them from the token's claims. auth-, ride- and driver-service trust these headers without checking anything, so they must never be reachable directly: anyone who can call them without going through the gateway can pick any identity. Keep them on a private network and expose only the gateway.
+- **The gateway is the only entry point.** api-gateway verifies the JWT, removes any identity headers sent by the client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) and sets them from the token's claims. auth-, ride- and driver-service trust these headers without checking anything, so they must never be reachable directly: anyone who can call them without going through the gateway can pick any identity. Keep them on a private network and expose only the gateway: `docker compose` does exactly that, only the gateway (and AKHQ) publish ports.
 
 ## TODO
 

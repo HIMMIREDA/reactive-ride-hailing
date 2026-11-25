@@ -69,26 +69,33 @@ sequenceDiagram
 
 ## Lancer le projet en local
 
-Pré-requis : Java 21, Maven, Docker avec Docker Compose.
+Pré-requis : Docker avec Compose v2 et Buildx (tous deux inclus dans Docker Desktop et dans les paquets docker-ce ; sur certaines distributions Linux, Buildx est un paquet séparé, par exemple `docker-buildx`). Java 21 et Maven ne servent qu'à lancer les tests ou un service hors de Docker.
 
 ```bash
-mvn clean install -U
-
 cd spring-webflux-poc
-cp .env.example .env           # puis choisissez votre utilisateur/mot de passe PostgreSQL et JWT_SECRET
-docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
-
-cd common
-mvn schema-registry:register   # enregistre les schémas Avro ; réessayer après quelques secondes en cas d'échec
-
-# puis lancer chaque service dans son propre terminal
-cd ../auth-service   && mvn spring-boot:run
-cd ../ride-service   && mvn spring-boot:run
-cd ../driver-service && mvn spring-boot:run
-cd ../api-gateway    && mvn spring-boot:run
+cp .env.example .env
+# renseignez JWT_SECRET dans .env (et les identifiants PostgreSQL si vous le souhaitez) :
+#   JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')
+docker compose up --build      # ou : docker compose up -d --build --wait
 ```
 
-Ports locaux : API gateway 8085, AKHQ 9000, Schema Registry 8081, Kafka 9092, PostgreSQL 15432, MongoDB 27017.
+Compose construit les images des quatre services, démarre PostgreSQL, MongoDB (replica set), Kafka, Schema Registry et AKHQ, enregistre les schémas Avro (conteneur ponctuel `schema-init`) et ne démarre chaque service qu'une fois ses dépendances en bonne santé. Le premier build télécharge les dépendances Maven ; les suivants réutilisent un cache BuildKit.
+
+Une fois tout en bonne santé, lancez le test de bout en bout depuis la racine du dépôt (nécessite `curl` et `jq`). Il inscrit un passager et un conducteur, crée une course, envoie et accepte une proposition, et vérifie que la course finit `BOOKED` :
+
+```bash
+scripts/smoke-test.sh
+```
+
+Ports publiés : API gateway http://localhost:8085 et AKHQ http://localhost:9000. Rien d'autre n'est joignable depuis la machine hôte (voir [Choix de conception](#choix-de-conception)). Pour accéder directement à une base, à Kafka, au Schema Registry ou à un service pendant le débogage, copiez `spring-webflux-poc/docker-compose.override.example.yml` en `docker-compose.override.yml` (ignoré par git) ; le fichier explique ce qu'il ouvre.
+
+### Lancer un service depuis l'IDE
+
+1. `cp docker-compose.override.example.yml docker-compose.override.yml`, puis `docker compose up -d` (publie les ports d'infrastructure utilisés par défaut par les services).
+2. `docker compose stop ride-service` (le service sur lequel vous travaillez).
+3. Lancez-le depuis l'IDE ou avec `mvn spring-boot:run` dans son module, sans le profil `docker` : il utilise `localhost` et lit `spring-webflux-poc/.env`.
+
+La gateway en conteneur route toujours vers le conteneur `ride-service`. Pour faire passer le trafic par une gateway jusqu'à l'instance de l'IDE, lancez aussi `api-gateway` depuis l'IDE (par défaut, elle pointe vers `localhost:8082`-`8084`).
 
 Une collection Postman est fournie : `spring-webflux-poc/poc-spring-webflux.postman_collection.json`.
 
@@ -120,7 +127,7 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 - **Demandes proches = historique + flux en direct.** driver-service renvoie d'abord les demandes existantes via une requête géospatiale, puis suit les nouvelles via un change stream MongoDB, et enchaîne les deux avec `Flux.concat`. Les change streams nécessitent un replica set : c'est pourquoi Docker Compose démarre MongoDB en replica set à un seul nœud.
 - **Événements typés.** Les événements Kafka sont des enregistrements Avro déclarés dans le Schema Registry, générés dans le module `common` et partagés par tous les services.
 - **Chaque service possède ses données.** ride-service garde la vue passager dans PostgreSQL ; driver-service garde sa propre copie dans MongoDB, qui fournit nativement les requêtes géo et les change streams.
-- **La gateway est le seul point d'entrée.** api-gateway vérifie le JWT, supprime les en-têtes d'identité envoyés par le client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) et les remplit à partir des claims du token. auth-, ride- et driver-service font confiance à ces en-têtes sans rien vérifier : ils ne doivent donc jamais être joignables directement, sinon n'importe qui peut se faire passer pour n'importe quel utilisateur. Gardez-les sur un réseau privé et n'exposez que la gateway.
+- **La gateway est le seul point d'entrée.** api-gateway vérifie le JWT, supprime les en-têtes d'identité envoyés par le client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) et les remplit à partir des claims du token. auth-, ride- et driver-service font confiance à ces en-têtes sans rien vérifier : ils ne doivent donc jamais être joignables directement, sinon n'importe qui peut se faire passer pour n'importe quel utilisateur. Gardez-les sur un réseau privé et n'exposez que la gateway : c'est ce que fait `docker compose`, seuls la gateway (et AKHQ) publient des ports.
 
 ## TODO
 
