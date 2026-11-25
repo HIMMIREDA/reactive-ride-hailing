@@ -26,9 +26,9 @@ public class RideRequestController {
             @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-Role") String role,
             @RequestHeader("X-Email") String email,
-            @RequestHeader("X-First-Name") String firstName,
-            @RequestHeader("X-Last-Name") String lastName,
-            @RequestHeader("X-Phone-Number") String phoneNumber,
+            @RequestHeader(value = "X-First-Name", defaultValue = "") String firstName,
+            @RequestHeader(value = "X-Last-Name", defaultValue = "") String lastName,
+            @RequestHeader(value = "X-Phone-Number", defaultValue = "") String phoneNumber,
             @RequestBody CreateRideRequestRequestDto requestDto
     ) {
         CustomerInternalDto customerInternalDto = CustomerInternalDto.builder()
@@ -47,9 +47,9 @@ public class RideRequestController {
             @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-Role") String role,
             @RequestHeader("X-Email") String email,
-            @RequestHeader("X-First-Name") String firstName,
-            @RequestHeader("X-Last-Name") String lastName,
-            @RequestHeader("X-Phone-Number") String phoneNumber,
+            @RequestHeader(value = "X-First-Name", defaultValue = "") String firstName,
+            @RequestHeader(value = "X-Last-Name", defaultValue = "") String lastName,
+            @RequestHeader(value = "X-Phone-Number", defaultValue = "") String phoneNumber,
             @PathVariable UUID rideRequestId,
             @RequestBody AcceptRideProposalRequestDto acceptRideProposalRequestDto
     ){
@@ -70,9 +70,9 @@ public class RideRequestController {
             @RequestHeader("X-User-Id") UUID userId,
             @RequestHeader("X-Role") String role,
             @RequestHeader("X-Email") String email,
-            @RequestHeader("X-First-Name") String firstName,
-            @RequestHeader("X-Last-Name") String lastName,
-            @RequestHeader("X-Phone-Number") String phoneNumber,
+            @RequestHeader(value = "X-First-Name", defaultValue = "") String firstName,
+            @RequestHeader(value = "X-Last-Name", defaultValue = "") String lastName,
+            @RequestHeader(value = "X-Phone-Number", defaultValue = "") String phoneNumber,
             @PathVariable UUID rideRequestId
             ){
 
