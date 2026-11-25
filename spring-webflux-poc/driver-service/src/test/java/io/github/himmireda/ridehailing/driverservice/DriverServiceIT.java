@@ -10,7 +10,12 @@ import io.github.himmireda.ridehailing.driverservice.repository.RideProposalRepo
 import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepository;
 import io.github.himmireda.ridehailing.driverservice.support.AvroKafkaTestClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import io.github.himmireda.ridehailing.driverservice.changestream.ChangeStreamProperties;
+import io.github.himmireda.ridehailing.driverservice.changestream.RideRequestChangeStream;
 import io.github.himmireda.ridehailing.driverservice.kafka.EventPublisher;
+import org.bson.BsonValue;
+import reactor.core.Disposable;
+import java.util.concurrent.CopyOnWriteArrayList;
 import io.github.himmireda.ridehailing.driverservice.outbox.OutboxDocument;
 import io.github.himmireda.ridehailing.driverservice.outbox.OutboxProperties;
 import io.github.himmireda.ridehailing.driverservice.outbox.OutboxRelay;
@@ -100,6 +105,10 @@ class DriverServiceIT {
     private OutboxProperties outboxProperties;
     @Autowired
     private EventPublisher eventPublisher;
+    @Autowired
+    private RideRequestChangeStream rideRequestChangeStream;
+    @Autowired
+    private ChangeStreamProperties changeStreamProperties;
 
     @Value("${kafka.topics.ride-request-requested}")
     private String rideRequestRequestedTopic;
@@ -319,6 +328,113 @@ class DriverServiceIT {
                         .flatMap(c -> Mono.from(c.countDocuments(new org.bson.Document("eventId", eventId)))).block())
                         .isEqualTo(1L);
             });
+        }
+    }
+
+    @Nested
+    class SharedChangeStream {
+
+        @Test
+        void subscribersInDifferentAreasShareOneWatchAndEachGetOnlyTheirNearbyRequests() {
+            int watchesBefore = rideRequestChangeStream.watchesOpened();
+            // Two drivers far apart (≈ 2 000 km), 5 km radius each. One existing request near each so the
+            // SSE responses start right away (history part).
+            String anchorNorth = saveRequested(40.0, 2.0);
+            String anchorSouth = saveRequested(20.0, 2.0);
+            List<String> north = new CopyOnWriteArrayList<>();
+            List<String> south = new CopyOnWriteArrayList<>();
+            Disposable northStream = nearbyStream(40.0, 2.0).subscribe(north::add);
+            Disposable southStream = nearbyStream(20.0, 2.0).subscribe(south::add);
+            try {
+                await().atMost(Duration.ofSeconds(15)).until(() -> north.contains(anchorNorth) && south.contains(anchorSouth));
+                // Both connections are fed by the service's single watch: no new cursor per subscriber.
+                assertThat(rideRequestChangeStream.watchesOpened()).isEqualTo(watchesBefore);
+                await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                        assertThat(openChangeStreamCursorsOnRideRequests()).isEqualTo(1));
+
+                String liveNorth = saveRequested(40.01, 2.01);
+                String liveSouth = saveRequested(20.01, 2.01);
+
+                await().atMost(Duration.ofSeconds(15)).until(() -> north.contains(liveNorth) && south.contains(liveSouth));
+                await().during(Duration.ofSeconds(1)).atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                    assertThat(north).doesNotContain(liveSouth, anchorSouth);
+                    assertThat(south).doesNotContain(liveNorth, anchorNorth);
+                });
+            } finally {
+                northStream.dispose();
+                southStream.dispose();
+            }
+        }
+
+        @Test
+        void streamRecoversAfterAnErrorAndResumesAfterTheLastEvent() {
+            // A second, independent change stream on the real MongoDB whose first watch fails after one event.
+            List<BsonValue> openedWith = new CopyOnWriteArrayList<>();
+            RideRequestChangeStream flaky = new RideRequestChangeStream(mongoTemplate, changeStreamProperties) {
+                @Override
+                protected Flux<Change> openChangeStream(BsonValue resumeAfter) {
+                    openedWith.add(resumeAfter);
+                    Flux<Change> real = super.openChangeStream(resumeAfter);
+                    return openedWith.size() == 1
+                            ? real.take(1).concatWith(Flux.error(new IllegalStateException("simulated cursor failure")))
+                            : real;
+                }
+            };
+            List<String> received = new CopyOnWriteArrayList<>();
+            Disposable subscriber = flaky.rideRequests().subscribe(ride -> received.add(ride.getRideRequestId()));
+            flaky.start();
+            try {
+                await().pollDelay(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> openedWith.size() == 1);
+                String first = saveRequested(10.0, 50.0);
+                await().atMost(Duration.ofSeconds(10)).until(() -> received.contains(first));
+                // Inserted while the stream is failing / backing off: delivered thanks to the resume token.
+                String duringOutage = saveRequested(10.0, 50.0);
+
+                await().atMost(Duration.ofSeconds(15)).until(() -> received.contains(duringOutage));
+                assertThat(openedWith).hasSize(2);
+                assertThat(openedWith.get(0)).isNull();
+                assertThat(openedWith.get(1)).isNotNull();   // reopened with the token of `first`
+                assertThat(flaky.watchesOpened()).isEqualTo(2);
+            } finally {
+                subscriber.dispose();
+                flaky.stop();
+            }
+        }
+
+        private String saveRequested(double lat, double lng) {
+            String id = UUID.randomUUID().toString();
+            rideRequestRepository.save(requestedRideAt(id, lat, lng)).block(Duration.ofSeconds(5));
+            return id;
+        }
+
+        private Flux<String> nearbyStream(double lat, double lng) {
+            return webTestClient
+                    .mutate().responseTimeout(Duration.ofSeconds(30)).build()
+                    .get().uri(uri -> uri.path("/api/rides/nearby/stream")
+                            .queryParam("lat", lat).queryParam("lng", lng).queryParam("radius", 5).build())
+                    .headers(h -> {
+                        h.set("X-User-Id", UUID.randomUUID().toString());
+                        h.set("X-Role", "DRIVER");
+                        h.set("X-Email", "driver@example.com");
+                    })
+                    .accept(MediaType.TEXT_EVENT_STREAM)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .returnResult(JSON_OBJECT)
+                    .getResponseBody()
+                    .map(event -> (String) event.get("rideRequestId"));
+        }
+
+        /** Server side: change-stream cursors open on ride_requests, from $currentOp (active and idle). */
+        private long openChangeStreamCursorsOnRideRequests() {
+            List<org.bson.Document> pipeline = List.of(
+                    new org.bson.Document("$currentOp", new org.bson.Document("allUsers", true).append("idleCursors", true)),
+                    new org.bson.Document("$match", new org.bson.Document("cursor.originatingCommand.aggregate", "ride_requests")
+                            .append("cursor.originatingCommand.pipeline.0.$changeStream", new org.bson.Document("$exists", true))));
+            return mongoTemplate.getMongoDatabaseFactory().getMongoDatabase("admin")
+                    .flatMapMany(admin -> admin.aggregate(pipeline))
+                    .count()
+                    .block(Duration.ofSeconds(5));
         }
     }
 

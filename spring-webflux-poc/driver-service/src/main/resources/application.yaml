@@ -65,3 +65,9 @@ app:
     batch-size: 100
     initial-backoff: 1s
     max-backoff: 30s
+
+  # One shared MongoDB change stream for all SSE subscribers (see RideRequestChangeStream).
+  change-stream:
+    subscriber-buffer: 256
+    min-retry-backoff: 500ms
+    max-retry-backoff: 30s
