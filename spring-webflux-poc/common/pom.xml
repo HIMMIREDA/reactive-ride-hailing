@@ -39,6 +39,11 @@
                         <poc-ride-proposal-accepted-v1-value>${project.basedir}/src/main/resources/avro/ride-proposal-accepted-schema.avsc</poc-ride-proposal-accepted-v1-value>
                         <poc-ride-proposal-booked-v1-value>${project.basedir}/src/main/resources/avro/ride-proposal-booked-schema.avsc</poc-ride-proposal-booked-v1-value>
                         <poc-ride-proposal-proposed-v1-value>${project.basedir}/src/main/resources/avro/ride-proposal-proposed-schema.avsc</poc-ride-proposal-proposed-v1-value>
+                        <!-- dead-letter topics: same schemas as their source topics -->
+                        <poc-ride-request-requested-v1.DLT-value>${project.basedir}/src/main/resources/avro/ride-request-requested-schema.avsc</poc-ride-request-requested-v1.DLT-value>
+                        <poc-ride-proposal-accepted-v1.DLT-value>${project.basedir}/src/main/resources/avro/ride-proposal-accepted-schema.avsc</poc-ride-proposal-accepted-v1.DLT-value>
+                        <poc-ride-proposal-booked-v1.DLT-value>${project.basedir}/src/main/resources/avro/ride-proposal-booked-schema.avsc</poc-ride-proposal-booked-v1.DLT-value>
+                        <poc-ride-proposal-proposed-v1.DLT-value>${project.basedir}/src/main/resources/avro/ride-proposal-proposed-schema.avsc</poc-ride-proposal-proposed-v1.DLT-value>
                     </subjects>
                 </configuration>
                 <goals>

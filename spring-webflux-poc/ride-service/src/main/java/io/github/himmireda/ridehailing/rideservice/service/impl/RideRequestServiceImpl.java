@@ -12,13 +12,13 @@ import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestNotFoundException;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestStatusConflictException;
+import io.github.himmireda.ridehailing.rideservice.kafka.EventPublisher;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
 import io.github.himmireda.ridehailing.rideservice.mapper.RideRequestMapper;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
 import io.github.himmireda.ridehailing.rideservice.service.RideRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -41,8 +41,7 @@ public class RideRequestServiceImpl implements RideRequestService {
     private final RideRequestRepository rideRequestRepository;
     private final RideRequestMapper rideRequestMapper;
     private final RideProposalSinkManager rideProposalSinkManager;
-    private final ReactiveKafkaProducerTemplate<String, RideRequestRequestedEvent> rideRequestRequestedProducerTemplate;
-    private final ReactiveKafkaProducerTemplate<String, RideProposalAcceptedEvent> rideProposalAcceptedProducerTemplate;
+    private final EventPublisher eventPublisher;
 
 
 
@@ -71,7 +70,7 @@ public class RideRequestServiceImpl implements RideRequestService {
                                     .setCustomerPhoneNumber(customerInternalDto.getCustomerPhoneNumber())
                                     .build();
 
-                            return rideRequestRequestedProducerTemplate.send(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
+                            return eventPublisher.publish(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
                                     .thenReturn(rideRequest)
                                     .log();
                         }
@@ -101,7 +100,7 @@ public class RideRequestServiceImpl implements RideRequestService {
                             .setRideRequestId(rideRequestEntity.getRideRequestId().toString())
                             .setRideProposalId(requestDto.getRideProposalId().toString())
                             .build();
-                    return rideProposalAcceptedProducerTemplate.send(rideProposalAcceptedTopicName, rideRequestEntity.getRideRequestId().toString(), event)
+                    return eventPublisher.publish(rideProposalAcceptedTopicName, rideRequestEntity.getRideRequestId().toString(), event)
                             .thenReturn(rideRequestEntity)
                             .log();
                 })

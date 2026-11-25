@@ -6,11 +6,26 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
     properties:
-        schema.registry.url: http://localhost:8081
-        auto.register.schemas: false
+      schema.registry.url: http://localhost:8081
+      # Schemas are registered up front (schema-init / mvn schema-registry:register), never by producers.
+      auto.register.schemas: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
     consumer:
       group-id: ride-service-consumer-group
       auto-offset-reset: earliest
+      # ErrorHandlingDeserializer: a record that can't be deserialized becomes a DeserializationException
+      # handled by the error handler (-> dead-letter topic) instead of failing every poll.
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: io.confluent.kafka.serializers.KafkaAvroDeserializer
+        specific.avro.reader: true
 
   r2dbc:
     url: r2dbc:postgresql://localhost:15432/rides
@@ -33,3 +48,12 @@ management:
     web:
       exposure:
         include: health
+
+# Listener retries before a record goes to its dead-letter topic (<topic>.DLT).
+app:
+  kafka:
+    retry:
+      max-retries: 3
+      initial-interval: 500ms
+      multiplier: 2.0
+      max-interval: 5s

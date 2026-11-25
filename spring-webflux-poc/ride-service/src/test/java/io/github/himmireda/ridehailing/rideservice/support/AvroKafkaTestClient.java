@@ -10,6 +10,8 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
@@ -48,6 +50,51 @@ public final class AvroKafkaTestClient {
         } catch (Exception e) {
             throw new IllegalStateException("Could not send test event to " + topic, e);
         }
+    }
+
+    /** Sends bytes that are not a valid Avro record (a "poison" record). */
+    public static void sendRaw(String bootstrapServers, String topic, String key, byte[] value) {
+        Map<String, Object> config = Map.of(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
+        try (KafkaProducer<String, byte[]> producer = new KafkaProducer<>(config)) {
+            producer.send(new ProducerRecord<>(topic, key, value)).get();
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not send raw test record to " + topic, e);
+        }
+    }
+
+    /** Like {@link #awaitRecord}, but returns the value as raw bytes (e.g. to read a dead-letter topic). */
+    @SuppressWarnings("unchecked")
+    public static ConsumerRecord<String, byte[]> awaitRawRecord(
+            String bootstrapServers, String topic, Predicate<ConsumerRecord<String, byte[]>> matcher) {
+        Map<String, Object> config = Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                ConsumerConfig.GROUP_ID_CONFIG, "test-" + UUID.randomUUID(),
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
+        try (KafkaConsumer<String, byte[]> consumer = new KafkaConsumer<>(config)) {
+            consumer.subscribe(List.of(topic));
+            ConsumerRecord<String, byte[]>[] found = new ConsumerRecord[1];
+            await().atMost(Duration.ofSeconds(30)).until(() -> {
+                for (ConsumerRecord<String, byte[]> record : consumer.poll(Duration.ofMillis(500))) {
+                    if (matcher.test(record)) {
+                        found[0] = record;
+                        return true;
+                    }
+                }
+                return false;
+            });
+            return found[0];
+        }
+    }
+
+    /** Value of a record header as a string, or null. */
+    public static String header(ConsumerRecord<?, ?> record, String name) {
+        var header = record.headers().lastHeader(name);
+        return header == null ? null : new String(header.value(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     /**

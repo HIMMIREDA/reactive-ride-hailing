@@ -6,7 +6,7 @@
 
 Un backend de VTC entièrement réactif, construit avec Spring WebFlux, Kafka, R2DBC et MongoDB. Un passager publie une demande de course, les conducteurs à proximité la voient en temps réel et proposent un prix, puis le passager voit les propositions en direct et en accepte une.
 
-Je l'ai réalisé pour comparer le modèle « un thread par requête » au modèle réactif. Le guide complet sur la programmation réactive en Java (threads, Reactive Streams, Reactor, fonctionnement interne de WebFlux, R2DBC, Reactor Kafka) se trouve dans [GUIDE.fr.md](GUIDE.fr.md) ([version anglaise](GUIDE.md)).
+Je l'ai réalisé pour comparer le modèle « un thread par requête » au modèle réactif. Le guide complet sur la programmation réactive en Java (threads, Reactive Streams, Reactor, fonctionnement interne de WebFlux, R2DBC, Kafka) se trouve dans [GUIDE.fr.md](GUIDE.fr.md) ([version anglaise](GUIDE.md)).
 
 ## Architecture
 
@@ -63,7 +63,7 @@ sequenceDiagram
 - PostgreSQL avec Spring Data R2DBC
 - MongoDB avec Spring Data MongoDB Reactive : requêtes géospatiales et change streams
 - Apache Kafka (mode KRaft), Confluent Schema Registry, Avro
-- Reactor Kafka, via les templates réactifs de Spring Kafka
+- Spring Kafka : `KafkaTemplate` et méthodes `@KafkaListener` qui renvoient un `Mono`, avec retries et dead-letter topics
 - Server-Sent Events pour le temps réel
 - Docker Compose, AKHQ (interface web Kafka)
 
@@ -124,7 +124,7 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 
 ## Choix de conception
 
-- **Réactif de bout en bout.** Un seul appel bloquant sur un EventLoop Netty bloque toutes les connexions gérées par cette boucle. Toutes les I/O passent donc par des drivers non bloquants : R2DBC pour PostgreSQL, le driver MongoDB réactif et Reactor Kafka.
+- **Réactif de bout en bout.** Un seul appel bloquant sur un EventLoop Netty bloque toutes les connexions gérées par cette boucle. Toutes les I/O passent donc par des drivers non bloquants : R2DBC pour PostgreSQL, le driver MongoDB réactif et Kafka via `KafkaTemplate` et `@KafkaListener` enveloppés dans des `Mono` (le seul appel potentiellement bloquant, `send()` qui attend les métadonnées, s'exécute sur `boundedElastic`).
 - **Demandes proches = historique + flux en direct.** driver-service renvoie d'abord les demandes existantes via une requête géospatiale, puis suit les nouvelles via un change stream MongoDB, et enchaîne les deux avec `Flux.concat`. Les change streams nécessitent un replica set : c'est pourquoi Docker Compose démarre MongoDB en replica set à un seul nœud.
 - **Événements typés.** Les événements Kafka sont des enregistrements Avro déclarés dans le Schema Registry, générés dans le module `common` et partagés par tous les services.
 - **Chaque service possède ses données.** ride-service garde la vue passager dans PostgreSQL ; driver-service garde sa propre copie dans MongoDB, qui fournit nativement les requêtes géo et les change streams.
@@ -133,10 +133,10 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 ## TODO
 
 - [ ] **Rendre atomiques les écritures base de données et Kafka.** Les services enregistrent en base puis publient sur Kafka. `@Transactional` ne couvre que la base : un crash ou une erreur Kafka entre les deux étapes fait perdre l'événement. Prévu : le pattern transactional outbox.
-- [ ] **Valider l'offset après l'envoi de l'événement suivant.** Dans `RideProposalAcceptedEventConsumer` (driver-service), l'offset est validé avant la publication de l'événement « booked ». Logger aussi les demandes ou propositions introuvables et les envoyer vers un dead-letter topic au lieu de les ignorer silencieusement.
-- [ ] **Ajouter une reprise sur erreur au consumer de driver-service.** Il se termine par un `subscribe()` sans gestion d'erreur et `KafkaFluxRegistry` se contente de logger : une seule exception arrête la consommation jusqu'au redémarrage. Prévu : `onErrorResume` ou `retryWhen` par message, plus un dead-letter topic.
+- [x] **Valider l'offset après l'envoi de l'événement suivant.** Les listeners renvoient un `Mono` et l'offset n'est validé qu'à sa fin, c'est-à-dire après l'acquittement de l'événement « booked » par Kafka. Un événement visant une demande ou une proposition inconnue est loggé, rejoué puis envoyé dans son dead-letter topic au lieu d'être ignoré.
+- [x] **Ajouter une reprise sur erreur aux consommateurs Kafka.** Les échecs sont rejoués avec un backoff exponentiel, puis le message part dans `<topic>.DLT` ; les messages impossibles à désérialiser y vont directement. Un message défectueux n'arrête plus la consommation.
 - [ ] **Partager un seul change stream entre les conducteurs.** Chaque connexion SSE ouvre son propre change stream MongoDB. Prévu : un flux unique diffusé aux abonnés avec `Sinks.many().multicast()`.
-- [ ] **Migrer hors de Reactor Kafka.** Le projet est arrêté depuis mai 2025 et les templates réactifs de Spring Kafka sont dépréciés ([annonce](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Prévu : Spring Kafka classique (`KafkaTemplate`, `@KafkaListener`) relié à `Mono`/`Flux`.
+- [x] **Migrer hors de Reactor Kafka.** Reactor Kafka est arrêté depuis mai 2025 et les templates réactifs de Spring Kafka sont dépréciés ([annonce](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Les services utilisent désormais Spring Kafka classique : `KafkaTemplate` relié via `Mono.fromFuture`, et des méthodes `@KafkaListener` qui renvoient `Mono<Void>`.
 - [x] **Ajouter des tests automatisés.** Tests d'intégration avec Testcontainers (Kafka, PostgreSQL, MongoDB) et `StepVerifier` pour les pipelines réactifs.
 - [x] **Renvoyer 409 pour les transitions de statut invalides.** Accepter une demande de course qui n'est plus `REQUESTED` renvoie 409 Conflict au lieu de 404 Not Found.
 - [x] **Tester l'authentification de la gateway.** Les tokens absents, malformés, mal signés ou expirés reçoivent 401 ; les tokens valides sont transmis avec les en-têtes d'identité, et les en-têtes d'identité envoyés par le client sont supprimés.

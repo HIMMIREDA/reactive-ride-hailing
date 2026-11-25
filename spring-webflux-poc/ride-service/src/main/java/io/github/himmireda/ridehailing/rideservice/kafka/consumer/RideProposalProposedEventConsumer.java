@@ -1,31 +1,25 @@
 package io.github.himmireda.ridehailing.rideservice.kafka.consumer;
 
 import io.github.himmireda.ridehailing.avro.RideProposalProposedEvent;
+import io.github.himmireda.ridehailing.rideservice.kafka.ResilientRecordProcessor;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.kafka.core.reactive.ReactiveKafkaConsumerTemplate;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
+/** Pushes driver offers to the riders' SSE streams (RideProposalSinkManager). */
 @RequiredArgsConstructor
 @Component
 public class RideProposalProposedEventConsumer {
 
     private final RideProposalSinkManager rideProposalSinkManager;
+    private final ResilientRecordProcessor resilientRecordProcessor;
 
-
-    private final ReactiveKafkaConsumerTemplate<String, RideProposalProposedEvent> reactiveRideProposalProposedKafkaConsumerTemplate;
-
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void startKafkaConsumer() {
-        reactiveRideProposalProposedKafkaConsumerTemplate
-                .receive()
-                .doOnNext(record -> {
-                    rideProposalSinkManager.emitProposal(record.value());
-                    record.receiverOffset().acknowledge();
-                })
-                .subscribe();
+    @KafkaListener(topics = "${kafka.topics.ride-proposal-proposed}")
+    public Mono<Void> onRideProposalProposed(ConsumerRecord<String, RideProposalProposedEvent> record) {
+        return resilientRecordProcessor.process(record,
+                () -> Mono.fromRunnable(() -> rideProposalSinkManager.emitProposal(record.value())));
     }
 }

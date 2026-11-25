@@ -17,7 +17,11 @@ import org.springframework.http.MediaType;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.dao.TransientDataAccessResourceException;
+import reactor.core.publisher.Mono;
+import java.nio.charset.StandardCharsets;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -30,14 +34,19 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import org.mockito.stubbing.Answer;
+import org.mockito.Mockito;
+
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 
 /**
  * ride-service against real PostgreSQL and Kafka containers. Avro goes through the in-memory mock
  * Schema Registry (see {@link AvroKafkaTestClient}).
  *
- * <p>Kafka gets both {@code @ServiceConnection} (used by Spring Boot's own Kafka beans, e.g. the
- * KafkaAdmin that creates the topics) and a {@code @DynamicPropertySource} entry, because this
- * service's producer/consumer configs read {@code spring.kafka.bootstrap-servers} with {@code @Value}.
+ * <p>Kafka uses {@code @ServiceConnection}: Spring Boot's auto-configured KafkaTemplate, listener
+ * containers and KafkaAdmin all take the container's address from it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -56,15 +65,18 @@ class RideServiceIT {
         registry.add("spring.flyway.url", postgres::getJdbcUrl);
         registry.add("spring.r2dbc.username", postgres::getUsername);
         registry.add("spring.r2dbc.password", postgres::getPassword);
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         registry.add("spring.kafka.properties.schema.registry.url", () -> AvroKafkaTestClient.SCHEMA_REGISTRY_URL);
         // The mock registry starts empty, so let the serializers register schemas on first use.
         registry.add("spring.kafka.properties.auto.register.schemas", () -> true);
+        // Short listener backoff so retry -> dead-letter tests run fast.
+        registry.add("app.kafka.retry.initial-interval", () -> "100ms");
+        registry.add("app.kafka.retry.max-interval", () -> "500ms");
     }
 
     @Autowired
     private WebTestClient webTestClient;
-    @Autowired
+    // Real repository wrapped in a Mockito spy: calls go through unless a test stubs them.
+    @MockitoSpyBean
     private RideRequestRepository rideRequestRepository;
     @Autowired
     private DatabaseClient databaseClient;
@@ -205,5 +217,104 @@ class RideServiceIT {
                 .one()
                 .block(Duration.ofSeconds(5));
         assertThat(bookedRows).isEqualTo(1L);
+    }
+
+    @Test
+    void poisonRecordGoesToDeadLetterTopicAndNextRecordIsStillProcessed() {
+        UUID rideRequestId = saveRide(RideRequestStatus.ACCEPTED);
+        String poisonKey = "poison-" + UUID.randomUUID();
+        byte[] poison = "this is not an Avro record".getBytes(StandardCharsets.UTF_8);
+        UUID rideProposalId = UUID.randomUUID();
+
+        AvroKafkaTestClient.sendRaw(kafka.getBootstrapServers(), rideProposalBookedTopic, poisonKey, poison);
+        AvroKafkaTestClient.send(kafka.getBootstrapServers(), rideProposalBookedTopic, rideProposalId.toString(),
+                bookedEvent(rideRequestId, rideProposalId));
+
+        // The valid record right behind the poison one is processed: consumption did not stop.
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(statusOf(rideRequestId)).isEqualTo("BOOKED"));
+
+        // The poison record was not retried: it went straight to the DLT with its original bytes.
+        ConsumerRecord<String, byte[]> dead = AvroKafkaTestClient.awaitRawRecord(
+                kafka.getBootstrapServers(), rideProposalBookedTopic + ".DLT", r -> poisonKey.equals(r.key()));
+        assertThat(dead.value()).isEqualTo(poison);
+        assertThat(dltExceptionInfo(dead)).contains("DeserializationException");
+    }
+
+    @Test
+    void transientFailureIsRetriedThenSucceeds() {
+        UUID rideRequestId = saveRide(RideRequestStatus.ACCEPTED);
+        // First lookup of this ride fails like a database hiccup, the next ones go to the real repository.
+        // (The bean is a JDK proxy of an interface: doCallRealMethod() can't be used. Spring's spy delegates
+        // to the real bean through its default answer, so reuse that answer for the next calls.)
+        Answer<?> delegateToRealRepository = Mockito.mockingDetails(rideRequestRepository)
+                .getMockCreationSettings().getDefaultAnswer();
+        doReturn(Mono.error(new TransientDataAccessResourceException("simulated database hiccup")))
+                .doAnswer(delegateToRealRepository)
+                .when(rideRequestRepository).findById(rideRequestId);
+        UUID rideProposalId = UUID.randomUUID();
+
+        AvroKafkaTestClient.send(kafka.getBootstrapServers(), rideProposalBookedTopic, rideProposalId.toString(),
+                bookedEvent(rideRequestId, rideProposalId));
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(statusOf(rideRequestId)).isEqualTo("BOOKED"));
+        verify(rideRequestRepository, atLeast(2)).findById(rideRequestId);
+    }
+
+    @Test
+    void bookedEventForUnknownRideIsRetriedThenDeadLettered() {
+        UUID unknownRideRequestId = UUID.randomUUID();
+        UUID rideProposalId = UUID.randomUUID();
+
+        AvroKafkaTestClient.send(kafka.getBootstrapServers(), rideProposalBookedTopic, rideProposalId.toString(),
+                bookedEvent(unknownRideRequestId, rideProposalId));
+
+        ConsumerRecord<String, byte[]> dead = AvroKafkaTestClient.awaitRawRecord(
+                kafka.getBootstrapServers(), rideProposalBookedTopic + ".DLT",
+                r -> rideProposalId.toString().equals(r.key()));
+        assertThat(dltExceptionInfo(dead)).contains("EventTargetNotFoundException");
+    }
+
+    private UUID saveRide(RideRequestStatus status) {
+        return rideRequestRepository.save(RideRequestEntity.builder()
+                        .customerId(UUID.randomUUID())
+                        .seats(1).preferredPrice(10)
+                        .startLat(33.2).startLng(20.2).endLat(50.1).endLng(20.1)
+                        .status(status)
+                        .build())
+                .block(Duration.ofSeconds(5))
+                .getRideRequestId();
+    }
+
+    /** Reads the status with SQL, bypassing the spied repository. */
+    private String statusOf(UUID rideRequestId) {
+        return databaseClient.sql("SELECT status FROM ride_requests WHERE ride_request_id = :id")
+                .bind("id", rideRequestId)
+                .map(row -> row.get(0, String.class))
+                .one()
+                .block(Duration.ofSeconds(5));
+    }
+
+    private static RideProposalBookedEvent bookedEvent(UUID rideRequestId, UUID rideProposalId) {
+        return RideProposalBookedEvent.newBuilder()
+                .setRideRequestId(rideRequestId.toString())
+                .setRideProposalId(rideProposalId.toString())
+                .setDriverId(UUID.randomUUID().toString())
+                .setDriverEmail("driver@example.com")
+                .setDriverFirstName("Grace")
+                .setDriverLastName("Hopper")
+                .setDriverPhoneNumber("0600000002")
+                .setPrice(15.5)
+                .setCreatedAt(LocalDateTime.now().toString())
+                .build();
+    }
+
+    /** The exception headers DeadLetterPublishingRecoverer adds to a dead-lettered record. */
+    private static String dltExceptionInfo(ConsumerRecord<?, ?> record) {
+        return String.join(" | ",
+                String.valueOf(AvroKafkaTestClient.header(record, "kafka_dlt-exception-fqcn")),
+                String.valueOf(AvroKafkaTestClient.header(record, "kafka_dlt-exception-cause-fqcn")),
+                String.valueOf(AvroKafkaTestClient.header(record, "kafka_dlt-exception-message")));
     }
 }

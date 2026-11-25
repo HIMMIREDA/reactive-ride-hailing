@@ -9,6 +9,7 @@ import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestNotFoundException;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestStatusConflictException;
+import io.github.himmireda.ridehailing.rideservice.kafka.EventPublisher;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
 import io.github.himmireda.ridehailing.rideservice.mapper.RideRequestMapperImpl;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
@@ -22,10 +23,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Mono;
-import reactor.kafka.sender.SenderResult;
 import reactor.test.StepVerifier;
 import reactor.test.publisher.PublisherProbe;
 
@@ -36,7 +35,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -61,9 +59,7 @@ class RideRequestServiceImplTest {
     @Mock
     private RideProposalSinkManager rideProposalSinkManager;
     @Mock
-    private ReactiveKafkaProducerTemplate<String, RideRequestRequestedEvent> requestedProducer;
-    @Mock
-    private ReactiveKafkaProducerTemplate<String, RideProposalAcceptedEvent> acceptedProducer;
+    private EventPublisher eventPublisher;
 
     private RideRequestServiceImpl service;
 
@@ -78,9 +74,8 @@ class RideRequestServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        // Both producer templates have the same raw type, so @InjectMocks could mix them up: build by hand.
         service = new RideRequestServiceImpl(rideRequestRepository, new RideRequestMapperImpl(),
-                rideProposalSinkManager, requestedProducer, acceptedProducer);
+                rideProposalSinkManager, eventPublisher);
         // The topic names are @Value fields, which only Spring fills in.
         ReflectionTestUtils.setField(service, "rideRequestRequestedTopicName", REQUESTED_TOPIC);
         ReflectionTestUtils.setField(service, "rideProposalAcceptedTopicName", ACCEPTED_TOPIC);
@@ -91,9 +86,8 @@ class RideRequestServiceImplTest {
      * {@code wasSubscribed()} catches a classic reactive bug: building the "send" Mono but
      * never chaining it, so nothing is actually sent.
      */
-    @SuppressWarnings("unchecked")
-    private static PublisherProbe<SenderResult<Void>> sendProbe() {
-        return PublisherProbe.of(Mono.just((SenderResult<Void>) mock(SenderResult.class)));
+    private static PublisherProbe<Void> sendProbe() {
+        return PublisherProbe.empty();
     }
 
     @Nested
@@ -114,8 +108,8 @@ class RideRequestServiceImplTest {
                 entity.setCreatedAt(LocalDateTime.of(2026, 1, 1, 10, 0));
                 return Mono.just(entity);
             });
-            PublisherProbe<SenderResult<Void>> send = sendProbe();
-            when(requestedProducer.send(anyString(), anyString(), any(RideRequestRequestedEvent.class)))
+            PublisherProbe<Void> send = sendProbe();
+            when(eventPublisher.publish(anyString(), anyString(), any(RideRequestRequestedEvent.class)))
                     .thenReturn(send.mono());
 
             StepVerifier.create(service.createRideRequest(customer, request))
@@ -132,7 +126,7 @@ class RideRequestServiceImplTest {
             assertThat(saved.getValue().getCustomerId()).isEqualTo(customer.getCustomerId());
 
             ArgumentCaptor<RideRequestRequestedEvent> event = ArgumentCaptor.forClass(RideRequestRequestedEvent.class);
-            verify(requestedProducer).send(eq(REQUESTED_TOPIC), eq(generatedId.toString()), event.capture());
+            verify(eventPublisher).publish(eq(REQUESTED_TOPIC), eq(generatedId.toString()), event.capture());
             assertThat(event.getValue().getRideRequestId()).hasToString(generatedId.toString());
             assertThat(event.getValue().getCustomerId()).hasToString(customer.getCustomerId().toString());
             assertThat(event.getValue().getCustomerEmail()).hasToString("rider@example.com");
@@ -167,8 +161,8 @@ class RideRequestServiceImplTest {
                     .thenReturn(Mono.just(existingRequest(RideRequestStatus.REQUESTED)));
             when(rideRequestRepository.save(any(RideRequestEntity.class)))
                     .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-            PublisherProbe<SenderResult<Void>> send = sendProbe();
-            when(acceptedProducer.send(anyString(), anyString(), any(RideProposalAcceptedEvent.class)))
+            PublisherProbe<Void> send = sendProbe();
+            when(eventPublisher.publish(anyString(), anyString(), any(RideProposalAcceptedEvent.class)))
                     .thenReturn(send.mono());
 
             StepVerifier.create(service.acceptRideProposal(customer, rideRequestId, request))
@@ -183,7 +177,7 @@ class RideRequestServiceImplTest {
             assertThat(saved.getValue().getStatus()).isEqualTo(RideRequestStatus.ACCEPTED);
 
             ArgumentCaptor<RideProposalAcceptedEvent> event = ArgumentCaptor.forClass(RideProposalAcceptedEvent.class);
-            verify(acceptedProducer).send(eq(ACCEPTED_TOPIC), eq(rideRequestId.toString()), event.capture());
+            verify(eventPublisher).publish(eq(ACCEPTED_TOPIC), eq(rideRequestId.toString()), event.capture());
             assertThat(event.getValue().getRideRequestId()).hasToString(rideRequestId.toString());
             assertThat(event.getValue().getRideProposalId()).hasToString(rideProposalId.toString());
             send.assertWasSubscribed();
@@ -202,7 +196,7 @@ class RideRequestServiceImplTest {
                     .verify();
 
             verify(rideRequestRepository, never()).save(any());
-            verifyNoInteractions(acceptedProducer);
+            verifyNoInteractions(eventPublisher);
         }
 
         // The request exists but can no longer be accepted: 409 Conflict, not 404 Not Found.
@@ -223,7 +217,7 @@ class RideRequestServiceImplTest {
                     .verify();
 
             verify(rideRequestRepository, never()).save(any());
-            verifyNoInteractions(acceptedProducer);
+            verifyNoInteractions(eventPublisher);
         }
     }
 }

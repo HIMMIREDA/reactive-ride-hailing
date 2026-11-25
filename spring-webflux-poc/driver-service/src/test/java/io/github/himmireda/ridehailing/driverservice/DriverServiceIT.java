@@ -58,9 +58,10 @@ class DriverServiceIT {
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         registry.add("spring.kafka.properties.schema.registry.url", () -> AvroKafkaTestClient.SCHEMA_REGISTRY_URL);
         registry.add("spring.kafka.properties.auto.register.schemas", () -> true);
+        registry.add("app.kafka.retry.initial-interval", () -> "100ms");
+        registry.add("app.kafka.retry.max-interval", () -> "500ms");
     }
 
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT = new ParameterizedTypeReference<>() {};
@@ -192,6 +193,27 @@ class DriverServiceIT {
         assertThat(booked.value().getRideProposalId()).hasToString(rideProposalId);
         assertThat(booked.value().getDriverId()).hasToString(driverId);
         assertThat(booked.value().getPrice()).isEqualTo(15.5);
+    }
+
+    @Test
+    void acceptedEventForUnknownOfferIsRetriedThenDeadLettered() {
+        String rideRequestId = UUID.randomUUID().toString();
+        rideRequestRepository.save(requestedRideAt(rideRequestId, 5.0, 5.0)).block(Duration.ofSeconds(5));
+        String unknownProposalId = UUID.randomUUID().toString();
+
+        AvroKafkaTestClient.send(kafka.getBootstrapServers(), rideProposalAcceptedTopic, rideRequestId,
+                RideProposalAcceptedEvent.newBuilder()
+                        .setRideRequestId(rideRequestId)
+                        .setRideProposalId(unknownProposalId)
+                        .build());
+
+        ConsumerRecord<String, byte[]> dead = AvroKafkaTestClient.awaitRawRecord(
+                kafka.getBootstrapServers(), rideProposalAcceptedTopic + ".DLT", r -> rideRequestId.equals(r.key()));
+        assertThat(AvroKafkaTestClient.header(dead, "kafka_dlt-exception-fqcn")).contains("EventTargetNotFoundException");
+        assertThat(AvroKafkaTestClient.header(dead, "kafka_dlt-exception-message")).contains(unknownProposalId);
+        // Nothing was booked.
+        assertThat(rideRequestRepository.findById(rideRequestId).block(Duration.ofSeconds(5)).getStatus())
+                .isEqualTo(RideRequestStatus.REQUESTED);
     }
 
     private static RideRequestEntity requestedRideAt(String id, double lat, double lng) {

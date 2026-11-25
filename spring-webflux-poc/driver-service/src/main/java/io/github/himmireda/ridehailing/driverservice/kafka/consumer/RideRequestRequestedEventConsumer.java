@@ -3,43 +3,33 @@ package io.github.himmireda.ridehailing.driverservice.kafka.consumer;
 import io.github.himmireda.ridehailing.avro.RideRequestRequestedEvent;
 import io.github.himmireda.ridehailing.driverservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.driverservice.enums.RideRequestStatus;
-import io.github.himmireda.ridehailing.driverservice.kafka.KafkaFluxRegistry;
+import io.github.himmireda.ridehailing.driverservice.kafka.ResilientRecordProcessor;
 import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepository;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.UUID;
 
+/** Stores new ride requests so drivers can find them (geo query + change stream). */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class RideRequestRequestedEventConsumer {
-    private final KafkaFluxRegistry kafkaFluxRegistry;
 
     private final RideRequestRepository rideRequestRepository;
+    private final ResilientRecordProcessor resilientRecordProcessor;
 
-    @Value("${kafka.topics.ride-request-requested}")
-    private String rideRequestRequestedTopicName;
-
-
-    @Transactional
-    @EventListener(ApplicationReadyEvent.class)
-    public void startKafkaConsumer() {
-        kafkaFluxRegistry.getFlux(rideRequestRequestedTopicName)
-                .autoConnect()
-                .flatMap(r ->{
-                    RideRequestRequestedEvent event = (RideRequestRequestedEvent) r.value();
-                    RideRequestEntity rideRequestEntity = mapToRideEntity(event);
-                    return rideRequestRepository.save(rideRequestEntity)
-                            .doOnNext(entity -> r.receiverOffset().acknowledge());
-                })
-                .subscribe();
+    /** Async listener: the offset is committed once the document is saved (or the record dead-lettered). */
+    @KafkaListener(topics = "${kafka.topics.ride-request-requested}")
+    public Mono<Void> onRideRequestRequested(ConsumerRecord<String, RideRequestRequestedEvent> record) {
+        return resilientRecordProcessor.process(record,
+                () -> rideRequestRepository.save(mapToRideEntity(record.value())).then());
     }
 
     private RideRequestEntity mapToRideEntity(RideRequestRequestedEvent event) {

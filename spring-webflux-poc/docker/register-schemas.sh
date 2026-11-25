@@ -31,3 +31,9 @@ register poc-ride-request-requested-v1-value ride-request-requested-schema.avsc
 register poc-ride-proposal-accepted-v1-value ride-proposal-accepted-schema.avsc
 register poc-ride-proposal-booked-v1-value   ride-proposal-booked-schema.avsc
 register poc-ride-proposal-proposed-v1-value ride-proposal-proposed-schema.avsc
+
+# Dead-letter topics of the consumed topics: failed records are republished there with the same schema.
+register poc-ride-request-requested-v1.DLT-value ride-request-requested-schema.avsc
+register poc-ride-proposal-accepted-v1.DLT-value ride-proposal-accepted-schema.avsc
+register poc-ride-proposal-booked-v1.DLT-value   ride-proposal-booked-schema.avsc
+register poc-ride-proposal-proposed-v1.DLT-value ride-proposal-proposed-schema.avsc
