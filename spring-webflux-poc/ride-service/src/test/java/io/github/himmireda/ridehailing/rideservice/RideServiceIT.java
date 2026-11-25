@@ -4,7 +4,18 @@ import io.github.himmireda.ridehailing.avro.RideProposalBookedEvent;
 import io.github.himmireda.ridehailing.avro.RideRequestRequestedEvent;
 import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
+import io.github.himmireda.ridehailing.messaging.EventHeaders;
+import io.github.himmireda.ridehailing.rideservice.kafka.EventPublisher;
+import io.github.himmireda.ridehailing.rideservice.outbox.OutboxProperties;
+import io.github.himmireda.ridehailing.rideservice.outbox.OutboxRelay;
+import io.github.himmireda.ridehailing.rideservice.outbox.OutboxWriter;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
+import org.junit.jupiter.api.Nested;
+import org.springframework.transaction.reactive.TransactionalOperator;
+import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import io.github.himmireda.ridehailing.rideservice.support.AvroKafkaTestClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -37,6 +48,7 @@ import static org.awaitility.Awaitility.await;
 import org.mockito.stubbing.Answer;
 import org.mockito.Mockito;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
@@ -71,6 +83,11 @@ class RideServiceIT {
         // Short listener backoff so retry -> dead-letter tests run fast.
         registry.add("app.kafka.retry.initial-interval", () -> "100ms");
         registry.add("app.kafka.retry.max-interval", () -> "500ms");
+        // Fast outbox relay with small batches (several relays compete in one test).
+        registry.add("app.outbox.poll-interval", () -> "200ms");
+        registry.add("app.outbox.batch-size", () -> "5");
+        registry.add("app.outbox.initial-backoff", () -> "200ms");
+        registry.add("app.outbox.max-backoff", () -> "1s");
     }
 
     @Autowired
@@ -80,6 +97,16 @@ class RideServiceIT {
     private RideRequestRepository rideRequestRepository;
     @Autowired
     private DatabaseClient databaseClient;
+    @MockitoSpyBean
+    private OutboxWriter outboxWriter;
+    @Autowired
+    private OutboxRelay outboxRelay;
+    @Autowired
+    private OutboxProperties outboxProperties;
+    @Autowired
+    private EventPublisher eventPublisher;
+    @Autowired
+    private TransactionalOperator transactionalOperator;
 
     @Value("${kafka.topics.ride-request-requested}")
     private String rideRequestRequestedTopic;
@@ -117,6 +144,8 @@ class RideServiceIT {
                 kafka.getBootstrapServers(), rideRequestRequestedTopic,
                 r -> r.key().equals(rideRequestId.toString()));
         RideRequestRequestedEvent event = record.value();
+        // Published by the outbox relay: the event id header is the outbox row id.
+        assertThat(AvroKafkaTestClient.header(record, EventHeaders.EVENT_ID)).isEqualTo(outboxIdOf(rideRequestId.toString()));
         assertThat(event.getCustomerId()).hasToString(customerId.toString());
         assertThat(event.getCustomerEmail()).hasToString("rider@example.com");
         assertThat(event.getSeats()).isEqualTo(2);
@@ -316,5 +345,156 @@ class RideServiceIT {
                 String.valueOf(AvroKafkaTestClient.header(record, "kafka_dlt-exception-fqcn")),
                 String.valueOf(AvroKafkaTestClient.header(record, "kafka_dlt-exception-cause-fqcn")),
                 String.valueOf(AvroKafkaTestClient.header(record, "kafka_dlt-exception-message")));
+    }
+
+    @Nested
+    class TransactionalOutbox {
+
+        @Test
+        void rideRowAndOutboxRowAreWrittenInOneTransaction() {
+            UUID customerId = UUID.randomUUID();
+            // The outbox insert fails once: the ride row must be rolled back with it.
+            Answer<?> realOutboxWriter = Mockito.mockingDetails(outboxWriter).getMockCreationSettings().getDefaultAnswer();
+            doReturn(Mono.error(new IllegalStateException("simulated outbox failure")))
+                    .doAnswer(realOutboxWriter)
+                    .when(outboxWriter).append(any(), any(), any(), any());
+
+            postRide(customerId).expectStatus().is5xxServerError();
+
+            Long rows = databaseClient.sql("SELECT count(*) FROM ride_requests WHERE customer_id = :customerId")
+                    .bind("customerId", customerId)
+                    .map(row -> row.get(0, Long.class)).one().block(Duration.ofSeconds(5));
+            assertThat(rows).isZero();
+        }
+
+        @Test
+        void rideCreatedWhileKafkaIsDownIsPublishedOnceKafkaIsBack() {
+            String rideRequestId;
+            // Pause (not stop) the broker: it keeps its address, but every client request hangs.
+            kafka.getDockerClient().pauseContainerCmd(kafka.getContainerId()).exec();
+            try {
+                // The API doesn't need Kafka anymore: the event waits in the outbox.
+                rideRequestId = (String) postRide(UUID.randomUUID()).expectStatus().isOk()
+                        .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
+                        .returnResult().getResponseBody().get("rideRequestId");
+
+                // The relay tries, fails (producer timeouts) and backs off; the row stays unpublished.
+                await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+                    Map<String, Object> outbox = outboxRowOf(rideRequestId);
+                    assertThat((Integer) outbox.get("attempts")).isGreaterThanOrEqualTo(1);
+                    assertThat(outbox.get("published_at")).isNull();
+                });
+            } finally {
+                kafka.getDockerClient().unpauseContainerCmd(kafka.getContainerId()).exec();
+            }
+
+            ConsumerRecord<String, RideRequestRequestedEvent> record = AvroKafkaTestClient.awaitRecord(
+                    kafka.getBootstrapServers(), rideRequestRequestedTopic, r -> r.key().equals(rideRequestId));
+            assertThat(AvroKafkaTestClient.header(record, EventHeaders.EVENT_ID)).isEqualTo(outboxIdOf(rideRequestId));
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                    assertThat(outboxRowOf(rideRequestId).get("published_at")).isNotNull());
+        }
+
+        @Test
+        void twoRelayInstancesPublishEachEventExactlyOnce() {
+            String topic = "outbox-relay-it-" + UUID.randomUUID();
+            int events = 40;
+            IntStream.range(0, events).forEach(i -> outboxWriter.append(topic, "key-" + i, "aggregate-" + i,
+                            sampleRequestedEvent("ride-" + i))
+                    .block(Duration.ofSeconds(5)));
+
+            // A second relay, like a second ride-service instance, polling the same table.
+            OutboxRelay secondRelay = new OutboxRelay("second-relay", databaseClient, transactionalOperator,
+                    eventPublisher, outboxProperties);
+            long firstBefore = outboxRelay.publishedCount();
+            secondRelay.start();
+            try {
+                await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> assertThat(unpublishedCount(topic)).isZero());
+            } finally {
+                secondRelay.stop();
+            }
+
+            List<ConsumerRecord<String, byte[]>> records = AvroKafkaTestClient.readAll(
+                    kafka.getBootstrapServers(), topic, events, Duration.ofSeconds(3));
+            Map<String, Long> perEventId = records.stream().collect(Collectors.groupingBy(
+                    r -> AvroKafkaTestClient.header(r, EventHeaders.EVENT_ID), Collectors.counting()));
+            assertThat(perEventId).hasSize(events);
+            assertThat(perEventId.values()).allMatch(count -> count == 1L);
+            System.out.printf("relays shared the work: first=%d second=%d%n",
+                    outboxRelay.publishedCount() - firstBefore, secondRelay.publishedCount());
+        }
+    }
+
+    @Nested
+    class IdempotentConsumers {
+
+        @Test
+        void sameBookedEventDeliveredTwiceChangesStateOnce() {
+            UUID rideRequestId = saveRide(RideRequestStatus.ACCEPTED);
+            UUID rideProposalId = UUID.randomUUID();
+            String eventId = UUID.randomUUID().toString();
+            RideProposalBookedEvent event = bookedEvent(rideRequestId, rideProposalId);
+
+            // At-least-once delivery: the same event (same id) arrives twice, back to back.
+            for (int delivery = 0; delivery < 2; delivery++) {
+                AvroKafkaTestClient.send(kafka.getBootstrapServers(), rideProposalBookedTopic, rideProposalId.toString(),
+                        event, Map.of(EventHeaders.EVENT_ID, eventId));
+            }
+
+            await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                    assertThat(statusOf(rideRequestId)).isEqualTo("BOOKED"));
+            // Both deliveries were consumed: one applied, one recognized as a duplicate.
+            await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(countWhere("booked_ride_proposals", "ride_proposal_id", rideProposalId)).isEqualTo(1L);
+                assertThat(countWhere("processed_events", "event_id", eventId)).isEqualTo(1L);
+            });
+        }
+    }
+
+    private WebTestClient.ResponseSpec postRide(UUID customerId) {
+        return webTestClient.post().uri("/api/rides")
+                .header("X-User-Id", customerId.toString())
+                .header("X-Role", "USER")
+                .header("X-Email", "rider@example.com")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("startLng", 20.2, "startLat", 33.2, "endLng", 20.1, "endLat", 50.1,
+                        "seats", 1, "preferredPrice", 10.0))
+                .exchange();
+    }
+
+    private String outboxIdOf(String aggregateId) {
+        return String.valueOf(outboxRowOf(aggregateId).get("id"));
+    }
+
+    private Map<String, Object> outboxRowOf(String aggregateId) {
+        return databaseClient.sql("SELECT id, attempts, published_at FROM outbox WHERE aggregate_id = :aggregateId")
+                .bind("aggregateId", aggregateId)
+                .fetch().one().block(Duration.ofSeconds(5));
+    }
+
+    private long unpublishedCount(String topic) {
+        return databaseClient.sql("SELECT count(*) FROM outbox WHERE topic = :topic AND published_at IS NULL")
+                .bind("topic", topic)
+                .map(row -> row.get(0, Long.class)).one().block(Duration.ofSeconds(5));
+    }
+
+    private long countWhere(String table, String column, Object value) {
+        return databaseClient.sql("SELECT count(*) FROM " + table + " WHERE " + column + " = :value")
+                .bind("value", value)
+                .map(row -> row.get(0, Long.class)).one().block(Duration.ofSeconds(5));
+    }
+
+    private static RideRequestRequestedEvent sampleRequestedEvent(String rideRequestId) {
+        return RideRequestRequestedEvent.newBuilder()
+                .setRideRequestId(rideRequestId)
+                .setCustomerId(UUID.randomUUID().toString())
+                .setCustomerEmail("rider@example.com")
+                .setCustomerFirstName("Ada")
+                .setCustomerLastName("Lovelace")
+                .setCustomerPhoneNumber("0600000001")
+                .setSeats(1).setPreferredPrice(10)
+                .setStartLat(33.2).setStartLng(20.2).setEndLat(50.1).setEndLng(20.1)
+                .setCreatedAt(LocalDateTime.now().toString())
+                .build();
     }
 }

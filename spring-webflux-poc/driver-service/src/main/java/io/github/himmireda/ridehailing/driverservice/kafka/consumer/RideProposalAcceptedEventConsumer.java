@@ -5,7 +5,10 @@ import io.github.himmireda.ridehailing.avro.RideProposalBookedEvent;
 import io.github.himmireda.ridehailing.driverservice.entity.RideProposalEntity;
 import io.github.himmireda.ridehailing.driverservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.driverservice.enums.RideRequestStatus;
-import io.github.himmireda.ridehailing.driverservice.kafka.EventPublisher;
+import io.github.himmireda.ridehailing.driverservice.kafka.ProcessedEvents;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxWriter;
+import io.github.himmireda.ridehailing.messaging.EventIds;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import io.github.himmireda.ridehailing.driverservice.kafka.EventTargetNotFoundException;
 import io.github.himmireda.ridehailing.driverservice.kafka.ResilientRecordProcessor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -24,25 +27,38 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class RideProposalAcceptedEventConsumer {
 
+    private static final String CONSUMER = "driver-service.ride-proposal-accepted";
+
     private final RideRequestRepository rideRequestRepository;
     private final RideProposalRepository rideProposalRepository;
-    private final EventPublisher eventPublisher;
+    private final OutboxWriter outboxWriter;
     private final ResilientRecordProcessor resilientRecordProcessor;
+    private final ProcessedEvents processedEvents;
+    private final TransactionalOperator transactionalOperator;
 
     @Value("${kafka.topics.ride-proposal-booked}")
     private String rideProposalBookedTopic;
 
     /**
-     * The offset is committed only after the request is saved AND the booked event is acknowledged
-     * by Kafka (the returned Mono covers both). A missing request or offer fails the work, so the
-     * record is retried and then dead-lettered instead of being skipped silently.
+     * One MongoDB transaction: processed-event marker + request BOOKED + booked event in the outbox
+     * (published later by OutboxRelay). The offset is committed when that transaction committed. A
+     * missing request or offer fails the work, so the record is retried and then dead-lettered.
      */
     @KafkaListener(topics = "${kafka.topics.ride-proposal-accepted}")
     public Mono<Void> onRideProposalAccepted(ConsumerRecord<String, RideProposalAcceptedEvent> record) {
         RideProposalAcceptedEvent event = record.value();
         String rideRequestId = event.getRideRequestId().toString();
         String rideProposalId = event.getRideProposalId().toString();
-        return resilientRecordProcessor.process(record, () -> Mono.zip(
+        String eventId = EventIds.of(record);
+        return resilientRecordProcessor.process(record, () -> processedEvents.markProcessed(eventId, CONSUMER)
+                .flatMap(firstDelivery -> firstDelivery
+                        ? book(rideRequestId, rideProposalId)
+                        : Mono.<Void>fromRunnable(() -> log.info("Skipping duplicate accepted event {}", eventId)))
+                .as(transactionalOperator::transactional));
+    }
+
+    private Mono<Void> book(String rideRequestId, String rideProposalId) {
+        return Mono.zip(
                         rideRequestRepository.findById(rideRequestId)
                                 .switchIfEmpty(Mono.error(() -> new EventTargetNotFoundException(
                                         "Accepted event for unknown ride request " + rideRequestId))),
@@ -59,10 +75,10 @@ public class RideProposalAcceptedEventConsumer {
                     rideRequest.setStatus(RideRequestStatus.BOOKED);
                     rideRequest.setAcceptedRideProposalId(rideProposal.getRideProposalId());
                     return rideRequestRepository.save(rideRequest)
-                            .then(eventPublisher.publish(rideProposalBookedTopic, rideProposal.getRideProposalId(),
-                                    buildBookedEvent(rideRequest, rideProposal)));
+                            .then(outboxWriter.append(rideProposalBookedTopic, rideProposal.getRideProposalId(),
+                                    rideRequestId, buildBookedEvent(rideRequest, rideProposal)));
                 })
-                .then());
+                .then();
     }
 
     private RideProposalBookedEvent buildBookedEvent(RideRequestEntity request, RideProposalEntity proposal) {

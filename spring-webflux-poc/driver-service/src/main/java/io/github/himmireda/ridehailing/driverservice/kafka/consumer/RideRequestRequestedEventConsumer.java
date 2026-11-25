@@ -3,7 +3,10 @@ package io.github.himmireda.ridehailing.driverservice.kafka.consumer;
 import io.github.himmireda.ridehailing.avro.RideRequestRequestedEvent;
 import io.github.himmireda.ridehailing.driverservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.driverservice.enums.RideRequestStatus;
+import io.github.himmireda.ridehailing.driverservice.kafka.ProcessedEvents;
 import io.github.himmireda.ridehailing.driverservice.kafka.ResilientRecordProcessor;
+import io.github.himmireda.ridehailing.messaging.EventIds;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import lombok.RequiredArgsConstructor;
@@ -22,14 +25,22 @@ import java.time.ZoneId;
 @RequiredArgsConstructor
 public class RideRequestRequestedEventConsumer {
 
+    private static final String CONSUMER = "driver-service.ride-request-requested";
+
     private final RideRequestRepository rideRequestRepository;
     private final ResilientRecordProcessor resilientRecordProcessor;
+    private final ProcessedEvents processedEvents;
+    private final TransactionalOperator transactionalOperator;
 
     /** Async listener: the offset is committed once the document is saved (or the record dead-lettered). */
     @KafkaListener(topics = "${kafka.topics.ride-request-requested}")
     public Mono<Void> onRideRequestRequested(ConsumerRecord<String, RideRequestRequestedEvent> record) {
-        return resilientRecordProcessor.process(record,
-                () -> rideRequestRepository.save(mapToRideEntity(record.value())).then());
+        String eventId = EventIds.of(record);
+        return resilientRecordProcessor.process(record, () -> processedEvents.markProcessed(eventId, CONSUMER)
+                .flatMap(firstDelivery -> firstDelivery
+                        ? rideRequestRepository.save(mapToRideEntity(record.value())).then()
+                        : Mono.<Void>fromRunnable(() -> log.info("Skipping duplicate requested event {}", eventId)))
+                .as(transactionalOperator::transactional));
     }
 
     private RideRequestEntity mapToRideEntity(RideRequestRequestedEvent event) {

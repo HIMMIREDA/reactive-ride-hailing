@@ -130,9 +130,34 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 - **Chaque service possède ses données.** ride-service garde la vue passager dans PostgreSQL ; driver-service garde sa propre copie dans MongoDB, qui fournit nativement les requêtes géo et les change streams.
 - **La gateway est le seul point d'entrée.** api-gateway vérifie le JWT, supprime les en-têtes d'identité envoyés par le client (`X-User-Id`, `X-Role`, `X-Email`, `X-First-Name`, `X-Last-Name`, `X-Phone-Number`) et les remplit à partir des claims du token. auth-, ride- et driver-service font confiance à ces en-têtes sans rien vérifier : ils ne doivent donc jamais être joignables directement, sinon n'importe qui peut se faire passer pour n'importe quel utilisateur. Gardez-les sur un réseau privé et n'exposez que la gateway : c'est ce que fait `docker compose`, seuls la gateway (et AKHQ) publient des ports.
 
+## Fiabilité
+
+```mermaid
+flowchart LR
+    subgraph RS[ride-service]
+        API["POST /api/rides<br/>PUT /api/rides/{id}/accept"] -->|une transaction| PG[("ride_requests<br/>+ outbox")]
+        RELAY1["relais outbox<br/>FOR UPDATE SKIP LOCKED"] -->|lot| PG
+    end
+    subgraph DS[driver-service]
+        L["@KafkaListener<br/>renvoie un Mono"] -->|une transaction| MG[("processed_events<br/>+ ride_requests<br/>+ outbox")]
+        RELAY2["relais outbox<br/>réservation findAndModify"] -->|réserve| MG
+    end
+    RELAY1 -->|"publie, en-tête event-id"| K{{Kafka}}
+    RELAY2 -->|"publie, en-tête event-id"| K
+    K --> L
+    K -->|"après retries / message empoisonné"| DLT[("&lt;topic&gt;.DLT")]
+```
+
+- **Pas de double écriture.** Un service n'envoie jamais rien à Kafka pendant la requête. Il écrit l'événement dans une table (PostgreSQL) ou une collection (MongoDB) `outbox` dans la **même transaction** que la modification métier : les deux sont validées ensemble ou pas du tout. L'API continue de fonctionner quand Kafka est indisponible ; les événements attendent dans l'outbox.
+- **Relais outbox.** Une boucle en arrière-plan dans chaque service publie l'outbox dans l'ordre, met l'identifiant de l'événement dans un en-tête `event-id` et ne marque la ligne publiée qu'après l'acquittement de Kafka. En cas d'échec, il arrête le lot et attend avec un backoff exponentiel. Plusieurs instances peuvent tourner en parallèle : les lignes PostgreSQL sont verrouillées avec `SELECT ... FOR UPDATE SKIP LOCKED` (une instance saute les lignes tenues par une autre), les documents MongoDB sont réservés par un `findAndModify` atomique avec un bail.
+- **Au moins une fois.** Si un relais s'arrête après l'acquittement de Kafka mais avant de marquer la ligne, l'événement est republié. Les retries et redistributions côté consommateur produisent aussi des doublons. Chaque consommateur est donc idempotent.
+- **Consommateurs idempotents.** Chaque listener enregistre `(id d'événement, consommateur)` dans une table/collection `processed_events` dans la même transaction que la modification d'état, et ignore un événement déjà traité. J'ai préféré ce choix à de simples transitions d'état gardées (`ACCEPTED -> BOOKED`) : il est explicite, couvre les événements qui ne sont pas des transitions (l'enregistrement d'une nouvelle demande) et reste correct quand deux livraisons du même événement sont traitées en même temps (ce que font les listeners asynchrones). Les gardes sur le statut restent une seconde ligne de défense.
+- **Ordre.** Avec un seul relais, les événements sont publiés dans l'ordre de validation. Avec plusieurs relais, ou avec des retries, un événement peut en doubler un autre ; les consommateurs le tolèrent (un événement visant une demande inconnue est rejoué, puis envoyé en dead-letter).
+- **Pourquoi du polling plutôt que du CDC.** L'alternative est la capture de changements (CDC) : Debezium lit le WAL PostgreSQL / l'oplog MongoDB et publie les lignes de l'outbox via Kafka Connect, avec une latence plus faible et sans requêtes de polling. Il faut alors Kafka Connect, les connecteurs Debezium, la réplication logique et leur supervision. Pour ce projet, un relais par polling tient en quelques dizaines de lignes, tourne dans le service, fonctionne pareil dans Docker Compose, la CI et Testcontainers, et sa latence inférieure à la seconde suffit. À plus fort volume, l'« outbox event router » de Debezium serait l'étape suivante.
+
 ## TODO
 
-- [ ] **Rendre atomiques les écritures base de données et Kafka.** Les services enregistrent en base puis publient sur Kafka. `@Transactional` ne couvre que la base : un crash ou une erreur Kafka entre les deux étapes fait perdre l'événement. Prévu : le pattern transactional outbox.
+- [x] **Rendre atomiques les écritures base de données et Kafka.** Outbox transactionnelle dans ride-service (PostgreSQL) et driver-service (transaction MongoDB), publiée par un relais par polling ; les consommateurs sont idempotents. Voir [Fiabilité](#fiabilité).
 - [x] **Valider l'offset après l'envoi de l'événement suivant.** Les listeners renvoient un `Mono` et l'offset n'est validé qu'à sa fin, c'est-à-dire après l'acquittement de l'événement « booked » par Kafka. Un événement visant une demande ou une proposition inconnue est loggé, rejoué puis envoyé dans son dead-letter topic au lieu d'être ignoré.
 - [x] **Ajouter une reprise sur erreur aux consommateurs Kafka.** Les échecs sont rejoués avec un backoff exponentiel, puis le message part dans `<topic>.DLT` ; les messages impossibles à désérialiser y vont directement. Un message défectueux n'arrête plus la consommation.
 - [ ] **Partager un seul change stream entre les conducteurs.** Chaque connexion SSE ouvre son propre change stream MongoDB. Prévu : un flux unique diffusé aux abonnés avec `Sinks.many().multicast()`.

@@ -13,7 +13,7 @@ import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepos
 import io.github.himmireda.ridehailing.driverservice.service.RideProposalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import io.github.himmireda.ridehailing.driverservice.kafka.EventPublisher;
+import io.github.himmireda.ridehailing.driverservice.outbox.OutboxWriter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -27,7 +27,8 @@ public class RideProposalServiceImpl implements RideProposalService {
     private final RideProposalRepository rideProposalRepository;
     private final RideRequestRepository rideRequestRepository;
     private final RideProposalMapper rideProposalMapper;
-    private final EventPublisher eventPublisher;
+    // The proposed event goes to the outbox, in the same MongoDB transaction as the proposal.
+    private final OutboxWriter outboxWriter;
 
     @Value("${kafka.topics.ride-proposal-proposed}")
     private String rideProposalProposedTopicName;
@@ -64,7 +65,7 @@ public class RideProposalServiceImpl implements RideProposalService {
                             .setPrice(rideProposal.getPrice())
                             .setCreatedAt(rideProposal.getCreatedAt().toString())
                             .build();
-                    return eventPublisher.publish(rideProposalProposedTopicName, rideProposal.getRideProposalId(), event)
+                    return outboxWriter.append(rideProposalProposedTopicName, rideProposal.getRideProposalId(), rideProposal.getRideRequestId(), event)
                             .thenReturn(rideProposalMapper.mapToProposeRideProposalResponseDto(rideProposal));
                 });
     }
