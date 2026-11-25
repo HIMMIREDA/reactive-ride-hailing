@@ -29,11 +29,11 @@
     - [6.1 Architecture and principles](#61-architecture-and-principles)
       - [6.1.1 EventLoop Thread](#611-eventloop-thread)
       - [6.1.2 Request lifecycle in Spring WebFlux](#612-request-lifecycle-in-spring-webflux)
-  - [7. Reactive persistence and messaging: R2DBC and Reactor Kafka](#7-reactive-persistence-and-messaging-r2dbc-and-reactor-kafka)
+  - [7. Reactive persistence and messaging: R2DBC and Kafka](#7-reactive-persistence-and-messaging-r2dbc-and-kafka)
     - [7.1 R2DBC principles](#71-r2dbc-principles)
     - [7.2 Integration with Spring Data R2DBC](#72-integration-with-spring-data-r2dbc)
-    - [7.3 Reactor Kafka](#73-reactor-kafka)
-    - [7.4 Integration with Spring Kafka](#74-integration-with-spring-kafka)
+    - [7.3 Reactor Kafka (history)](#73-reactor-kafka-history)
+    - [7.4 Kafka with plain Spring Kafka in a reactive application](#74-kafka-with-plain-spring-kafka-in-a-reactive-application)
   - [8. Hands-on POC](#8-hands-on-poc)
   - [8.1 Prerequisites](#81-prerequisites)
   - [8.2 Running the POC](#82-running-the-poc)
@@ -512,7 +512,7 @@ This is how **Spring WebFlux** handles many concurrent requests with a limited n
 
 > **Note**: the diagram says *ScheduledTaskQueue*. In Netty, a task submitted from another thread actually goes through the event loop's regular task queue; the *scheduled task queue* is for delayed tasks (timers).
 
-## 7. Reactive persistence and messaging: R2DBC and Reactor Kafka
+## 7. Reactive persistence and messaging: R2DBC and Kafka
 For an application to be truly reactive, the whole path must be: from the user's request to the server, down to writing to the database and talking to other services such as Kafka. That is why reactive tools exist for each layer, such as R2DBC for databases and Reactor Kafka (or Spring Kafka's reactive support) for messaging. They work with Spring WebFlux and Project Reactor so the application stays reactive end to end.
 
 ### 7.1 R2DBC principles
@@ -593,96 +593,51 @@ public class UserService {
 }
 ```
 
-### 7.3 Reactor Kafka
-[Reactor Kafka](https://projectreactor.io/docs/kafka/release/reference/) is a reactive library for using [Apache Kafka](https://kafka.apache.org/) in Project Reactor applications. It offers a non-blocking, **Reactive Streams**-based API for both producing and consuming messages.
+### 7.3 Reactor Kafka (history)
+[Reactor Kafka](https://projectreactor.io/docs/kafka/release/reference/) was a reactive library for [Apache Kafka](https://kafka.apache.org/) built on Project Reactor: `KafkaReceiver` and `KafkaSender` exposed topics as `Flux` and sends as `Mono`, and Spring Kafka wrapped them in `ReactiveKafkaConsumerTemplate` / `ReactiveKafkaProducerTemplate`.
 
-> **Warning (May 2025)**: the Reactor Kafka project has been discontinued, and Spring for Apache Kafka's reactive templates (`ReactiveKafkaProducerTemplate`, `ReactiveKafkaConsumerTemplate`) are deprecated and will be removed. This POC still uses them. For a new project, prefer plain Spring Kafka (`KafkaTemplate`, `@KafkaListener`) and convert results to `Mono`/`Flux`. Source: [Reactor Kafka Project Will Be Discontinued](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued).
+> **May 2025**: the Reactor Kafka project was discontinued, and Spring Kafka's reactive templates are deprecated and will be removed ([announcement](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). This POC used them at first and has since **migrated to plain Spring Kafka** (next section). The reactive model stays the same: everything a service does with Kafka is still a `Mono`.
 
-### 7.4 Integration with Spring Kafka
-**[Spring for Apache Kafka](https://docs.spring.io/spring-kafka/reference/)** provides reactive templates (`ReactiveKafkaProducerTemplate`, `ReactiveKafkaConsumerTemplate`) that wrap Reactor Kafka (deprecated since 2025, see above).
+### 7.4 Kafka with plain Spring Kafka in a reactive application
+**[Spring for Apache Kafka](https://docs.spring.io/spring-kafka/reference/)** gives a `KafkaTemplate` to produce and `@KafkaListener` to consume. Two small bridges keep them reactive.
 
-**Code example (consuming with ReactiveKafkaConsumerTemplate):**
+**Producing: `KafkaTemplate` + `Mono.fromFuture`**
+
 ```java
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.core.reactive.ReactiveKafkaConsumerTemplate;
-import reactor.kafka.receiver.ReceiverOptions;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
-import reactor.core.publisher.Flux;
+@Component
+@RequiredArgsConstructor
+public class EventPublisher {
+    private final KafkaTemplate<String, SpecificRecord> kafkaTemplate;
 
-@Configuration
-public class KafkaConsumerConfig {
-
-    @Bean
-    public Map<String, Object> consumerConfigs() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
-        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG, "my-spring-reactive-group");
-        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(org.apache.kafka.clients.consumer.ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        return props;
-    }
-
-    @Bean
-    public ReactiveKafkaConsumerTemplate<String, String> reactiveKafkaConsumerTemplate() {
-        // the constructor takes ReceiverOptions (Reactor Kafka), not a ConsumerFactory
-        ReceiverOptions<String, String> options = ReceiverOptions.<String, String>create(consumerConfigs())
-                .subscription(List.of("my-topic"));
-        return new ReactiveKafkaConsumerTemplate<>(options);
-    }
-
-    @Bean
-    public Flux<String> kafkaConsumerFlux(ReactiveKafkaConsumerTemplate<String, String> reactiveKafkaConsumerTemplate) {
-        return reactiveKafkaConsumerTemplate
-                .receiveAutoAck()
-                .map(consumerRecord -> consumerRecord.value())
-                .doOnNext(message -> System.out.println("Received message: " + message));
+    public Mono<Void> publish(String topic, String key, SpecificRecord event) {
+        return Mono.fromFuture(() -> kafkaTemplate.send(topic, key, event)) // lazy: sends on subscribe
+                .subscribeOn(Schedulers.boundedElastic())                   // send() may block on metadata
+                .then();                                                    // completes on the broker ack
     }
 }
 ```
 
-**Code example (producing with ReactiveKafkaProducerTemplate):**
+* `Mono.fromFuture(() -> ...)` (supplier form) is lazy: nothing is sent until the `Mono` is subscribed, and a retry sends again. `Mono.fromFuture(kafkaTemplate.send(...))` would send immediately, at assembly time.
+* `send()` can block for up to `max.block.ms` while it fetches metadata (for example when Kafka is unreachable). `subscribeOn(boundedElastic)` keeps that off the Netty event loop.
+* Serializers are plain configuration (`spring.kafka.producer.*`): `StringSerializer` for keys, `KafkaAvroSerializer` for values, `acks=all`, idempotence on.
+
+**Consuming: `@KafkaListener` methods returning `Mono<Void>`**
+
 ```java
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
-import reactor.kafka.sender.SenderOptions;
-import org.apache.kafka.common.serialization.StringSerializer;
-import java.util.HashMap;
-import java.util.Map;
-import reactor.core.publisher.Mono;
-import org.apache.kafka.clients.producer.ProducerRecord;
-
-@Configuration
-public class KafkaProducerConfig {
-
-    @Bean
-    public Map<String, Object> producerConfigs() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
-        props.put(org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        props.put(org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        return props;
-    }
-
-    @Bean
-    public ReactiveKafkaProducerTemplate<String, String> reactiveKafkaProducerTemplate() {
-        // the constructor takes SenderOptions (Reactor Kafka), not a ProducerFactory
-        return new ReactiveKafkaProducerTemplate<>(SenderOptions.create(producerConfigs()));
-    }
-
-    public Mono<Void> sendMessage(ReactiveKafkaProducerTemplate<String, String> reactiveKafkaProducerTemplate, String topic, String key, String payload) {
-        return reactiveKafkaProducerTemplate
-                .send(new ProducerRecord<>(topic, key, payload))
-                .doOnSuccess(senderResult -> System.out.println("Sent message with offset: " + senderResult.recordMetadata().offset()))
-                .then();
-    }
+@KafkaListener(topics = "${kafka.topics.ride-proposal-accepted}")
+public Mono<Void> onRideProposalAccepted(ConsumerRecord<String, RideProposalAcceptedEvent> record) {
+    return resilientRecordProcessor.process(record, () -> /* reactive work, e.g. load, save, publish */ ...);
 }
 ```
+
+Since Spring Kafka 3.2, a listener can return a `Mono` (async listener): the container switches to manual acknowledgment and commits the offset only when the `Mono` completes. Records are no longer pulled through a long-lived `Flux` that one error could terminate.
+
+**Failures: retries, dead-letter topics, poison records**
+
+* **Poison records** (bytes that can't be deserialized): `ErrorHandlingDeserializer` wraps the String/Avro deserializers and turns the failure into a `DeserializationException` *before* the listener runs. The container's `DefaultErrorHandler` treats it as not retryable and its `DeadLetterPublishingRecoverer` publishes the original bytes to `<topic>.DLT`.
+* **Failures inside the listener's `Mono`** (database down, missing request or offer...): in Spring Kafka 3.3, a failed async result only reaches the container error handler for `@RetryableTopic` listeners; otherwise it is logged and the record acknowledged. So `ResilientRecordProcessor` retries inside the pipeline (`Retry.backoff`, exponential, `app.kafka.retry.*`) and, when retries are exhausted, hands the record to the **same** `DeadLetterPublishingRecoverer`.
+* Either way the `Mono` completes, the offset is committed and the next record is processed: one bad record never stops consumption, and nothing is skipped silently (an event about an unknown request or offer is logged, retried, then dead-lettered).
+* Trade-off: an async listener does not wait for one record before starting the next, so records of a partition can be processed out of order (and a retried record is overtaken). Consumers must therefore be idempotent and tolerate reordering.
 
 ## 8. Hands-on POC
 
@@ -705,7 +660,7 @@ See [Running it locally](README.md#running-it-locally) in the README: copy `.env
 6. [Apache Avro](https://avro.apache.org/) as the **serialization** format for Kafka messages.
 7. [PostgreSQL](https://www.postgresql.org/) and [Spring Data R2DBC](https://spring.io/projects/spring-data-r2dbc).
 8. [MongoDB](https://www.mongodb.com/) and [Spring Data MongoDB Reactive](https://www.baeldung.com/spring-data-mongodb-reactive).
-9.  [Spring for Apache Kafka Reactive](https://spring.io/projects/spring-kafka)
+9.  [Spring for Apache Kafka](https://spring.io/projects/spring-kafka): `KafkaTemplate` and `@KafkaListener` methods returning `Mono`, with dead-letter topics
 
 ## 8.4 Features
 
@@ -850,8 +805,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                             .build();
 
                     // Publish the event
-                    return rideRequestRequestedProducerTemplate
-                            .send(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
+                    return eventPublisher
+                            .publish(rideRequestRequestedTopicName, rideRequest.getRideRequestId().toString(), event)
                             .thenReturn(rideRequest);
                 })
                 .map(rideRequestMapper::mapToCreateRideRequestResponseDto);
@@ -918,8 +873,8 @@ public class RideProposalServiceImpl implements RideProposalService {
                             .setPrice(proposal.getPrice())
                             // ... other fields ...
                             .build();
-                    return rideProposalProposedEventProducer
-                            .send(rideProposalProposedTopicName, proposal.getRideProposalId(), event)
+                    return eventPublisher
+                            .publish(rideProposalProposedTopicName, proposal.getRideProposalId(), event)
                             .thenReturn(proposal);
                 })
                 .map(rideProposalMapper::mapToProposeRideProposalResponseDto);
@@ -954,8 +909,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                             .setRideRequestId(rideRequest.getRideRequestId().toString())
                             .setRideProposalId(requestDto.getRideProposalId().toString())
                             .build();
-                    return rideProposalAcceptedProducerTemplate
-                            .send(rideProposalAcceptedTopicName, rideRequest.getRideRequestId().toString(), event)
+                    return eventPublisher
+                            .publish(rideProposalAcceptedTopicName, rideRequest.getRideRequestId().toString(), event)
                             .thenReturn(rideRequest);
                 })
                 .map(rideRequestMapper::mapToAcceptRideProposalResponseDto);
@@ -969,68 +924,40 @@ public class RideRequestServiceImpl implements RideRequestService {
 @Component
 @RequiredArgsConstructor
 public class RideProposalAcceptedEventConsumer {
-    private final KafkaFluxRegistry kafkaFluxRegistry;
     private final RideRequestRepository rideRequestRepository;
     private final RideProposalRepository rideProposalRepository;
-    private final ReactiveKafkaProducerTemplate<String, RideProposalBookedEvent> rideProposalBookedEventProducer;
+    private final EventPublisher eventPublisher;
+    private final ResilientRecordProcessor resilientRecordProcessor;
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void startKafkaConsumer() {
-        // 1. Get the Kafka stream and auto-connect
-        kafkaFluxRegistry.getFlux(rideProposalAcceptedTopic)
-                .autoConnect()
-                .flatMap(record -> {
-                    // 2. Extract the request and offer IDs
-                    RideProposalAcceptedEvent event = (RideProposalAcceptedEvent) record.value();
-                    String rideRequestId = event.getRideRequestId().toString();
-                    String rideProposalId = event.getRideProposalId().toString();
+    // 1. Async listener: the offset is committed only when the returned Mono completes
+    @KafkaListener(topics = "${kafka.topics.ride-proposal-accepted}")
+    public Mono<Void> onRideProposalAccepted(ConsumerRecord<String, RideProposalAcceptedEvent> record) {
+        RideProposalAcceptedEvent event = record.value();
+        String rideRequestId = event.getRideRequestId().toString();
+        String rideProposalId = event.getRideProposalId().toString();
 
-                    // 3. Load the request and the offer from MongoDB
-                    return Mono.zip(
-                            rideRequestRepository.findById(rideRequestId),
-                            rideProposalRepository.findById(rideProposalId)
-                    )
-                    .switchIfEmpty(Mono.empty())
-                    .flatMap(tuple -> {
-                        RideRequestEntity rideRequest = tuple.getT1();
-                        RideProposalEntity rideProposal = tuple.getT2();
-
-                        // 4. Update the request status
-                        rideRequest.setStatus(RideRequestStatus.BOOKED);
-                        rideRequest.setAcceptedRideProposalId(rideProposal.getRideProposalId());
-
-                        // 5. Save and publish a new event
-                        return rideRequestRepository.save(rideRequest)
-                                .doOnSuccess(__ -> record.receiverOffset().acknowledge())
-                                .flatMap(__ -> {
-                                    // 6. Publish the booking event
-                                    RideProposalBookedEvent bookedEvent = buildBookedEvent(rideRequest, rideProposal);
-                                    return rideProposalBookedEventProducer
-                                            .send(rideProposalBookedTopic, rideProposal.getRideProposalId(), bookedEvent)
-                                            .then();
-                                });
-                    });
+        // 2. Retries with backoff, then dead-letter topic: a failure never stops consumption
+        return resilientRecordProcessor.process(record, () -> Mono.zip(
+                        // 3. Load the request and the offer; a missing one is an error (retried, then DLT)
+                        rideRequestRepository.findById(rideRequestId)
+                                .switchIfEmpty(Mono.error(() -> new EventTargetNotFoundException("unknown ride request " + rideRequestId))),
+                        rideProposalRepository.findById(rideProposalId)
+                                .switchIfEmpty(Mono.error(() -> new EventTargetNotFoundException("unknown ride proposal " + rideProposalId))))
+                .flatMap(tuple -> {
+                    RideRequestEntity rideRequest = tuple.getT1();
+                    RideProposalEntity rideProposal = tuple.getT2();
+                    // 4. Update the request status
+                    rideRequest.setStatus(RideRequestStatus.BOOKED);
+                    rideRequest.setAcceptedRideProposalId(rideProposal.getRideProposalId());
+                    // 5. Save, then publish the booked event; the offset is committed after both
+                    return rideRequestRepository.save(rideRequest)
+                            .then(eventPublisher.publish(rideProposalBookedTopic, rideProposal.getRideProposalId(),
+                                    buildBookedEvent(rideRequest, rideProposal)));
                 })
-                .subscribe();
+                .then());
     }
 }
 ```
-
-These examples show how the POC's main features are built with Spring WebFlux and Reactor:
-
-* Mono and Flux for asynchronous operations
-
-* Chaining operations with flatMap and map
-
-* Error handling with switchIfEmpty and handle
-
-* Reactive transactions with @Transactional (database only: the Kafka send is not part of the transaction; see the TODO list in the README)
-
-* Kafka for communication between services
-
-* MongoDB for geolocation and real-time streaming
-
-
 
 ## 9. References
 * [Project Reactor](https://projectreactor.io)

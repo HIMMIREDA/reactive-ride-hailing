@@ -13,7 +13,7 @@ import io.github.himmireda.ridehailing.driverservice.repository.RideRequestRepos
 import io.github.himmireda.ridehailing.driverservice.service.RideProposalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.reactive.ReactiveKafkaProducerTemplate;
+import io.github.himmireda.ridehailing.driverservice.kafka.EventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -27,7 +27,7 @@ public class RideProposalServiceImpl implements RideProposalService {
     private final RideProposalRepository rideProposalRepository;
     private final RideRequestRepository rideRequestRepository;
     private final RideProposalMapper rideProposalMapper;
-    private final ReactiveKafkaProducerTemplate<String, RideProposalProposedEvent> rideProposalProposedEventReactiveKafkaProducerTemplate;
+    private final EventPublisher eventPublisher;
 
     @Value("${kafka.topics.ride-proposal-proposed}")
     private String rideProposalProposedTopicName;
@@ -64,7 +64,7 @@ public class RideProposalServiceImpl implements RideProposalService {
                             .setPrice(rideProposal.getPrice())
                             .setCreatedAt(rideProposal.getCreatedAt().toString())
                             .build();
-                    return rideProposalProposedEventReactiveKafkaProducerTemplate.send(rideProposalProposedTopicName, rideProposal.getRideProposalId(), event)
+                    return eventPublisher.publish(rideProposalProposedTopicName, rideProposal.getRideProposalId(), event)
                             .thenReturn(rideProposalMapper.mapToProposeRideProposalResponseDto(rideProposal));
                 });
     }

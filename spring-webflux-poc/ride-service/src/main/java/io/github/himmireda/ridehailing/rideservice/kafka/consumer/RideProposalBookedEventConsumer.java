@@ -3,12 +3,14 @@ package io.github.himmireda.ridehailing.rideservice.kafka.consumer;
 import io.github.himmireda.ridehailing.avro.RideProposalBookedEvent;
 import io.github.himmireda.ridehailing.rideservice.entity.BookedRideProposalEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
+import io.github.himmireda.ridehailing.rideservice.kafka.EventTargetNotFoundException;
+import io.github.himmireda.ridehailing.rideservice.kafka.ResilientRecordProcessor;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import io.github.himmireda.ridehailing.rideservice.repository.BookedRideProposalRepository;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.kafka.core.reactive.ReactiveKafkaConsumerTemplate;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Mono;
@@ -16,37 +18,44 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@Slf4j
 @RequiredArgsConstructor
 @Component
 public class RideProposalBookedEventConsumer {
 
     private final BookedRideProposalRepository bookedRideProposalRepository;
     private final RideRequestRepository rideRequestRepository;
-    private final ReactiveKafkaConsumerTemplate<String, RideProposalBookedEvent> reactiveRideProposalBookedKafkaConsumerTemplate;
     private final TransactionalOperator transactionalOperator;
+    private final ResilientRecordProcessor resilientRecordProcessor;
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void startKafkaConsumer() {
-        reactiveRideProposalBookedKafkaConsumerTemplate
-                .receive()
-                .flatMap(record -> {
-                    RideProposalBookedEvent event = record.value();
-                    BookedRideProposalEntity bookedEntity = mapToBookedRideProposalEntity(event);
+    /**
+     * Async listener (Spring Kafka 3.2+): returning a Mono switches the container to manual acks, and
+     * the offset is committed only when the Mono completes. ResilientRecordProcessor retries failures
+     * with backoff and dead-letters the record when retries are exhausted.
+     */
+    @KafkaListener(topics = "${kafka.topics.ride-proposal-booked}")
+    public Mono<Void> onRideProposalBooked(ConsumerRecord<String, RideProposalBookedEvent> record) {
+        RideProposalBookedEvent event = record.value();
+        return resilientRecordProcessor.process(record, () -> {
                     UUID rideRequestId = UUID.fromString(event.getRideRequestId().toString());
-
-                    return rideRequestRepository.findByRideRequestIdAndStatus(rideRequestId, RideRequestStatus.ACCEPTED)
+                    return rideRequestRepository.findById(rideRequestId)
+                            .switchIfEmpty(Mono.error(() -> new EventTargetNotFoundException(
+                                    "Booked event for unknown ride request " + rideRequestId)))
                             .flatMap(rideRequest -> {
-                                rideRequest.setAcceptedRideProposalId(bookedEntity.getRideProposalId());
+                                if (rideRequest.getStatus() != RideRequestStatus.ACCEPTED) {
+                                    log.warn("Ignoring booked event for ride request {} in status {} (duplicate or out of order)",
+                                            rideRequestId, rideRequest.getStatus());
+                                    return Mono.empty();
+                                }
+                                BookedRideProposalEntity booked = mapToBookedRideProposalEntity(event);
+                                rideRequest.setAcceptedRideProposalId(booked.getRideProposalId());
                                 rideRequest.setStatus(RideRequestStatus.BOOKED);
-                                return rideRequestRepository.save(rideRequest);
+                                return rideRequestRepository.save(rideRequest)
+                                        .then(bookedRideProposalRepository.save(booked));
                             })
-                            .flatMap(savedRideRequest -> bookedRideProposalRepository.save(bookedEntity))
                             .then()
-                            .as(transactionalOperator::transactional)
-                            .doOnSuccess(unused -> record.receiverOffset().acknowledge());
-                })
-                .log()
-                .subscribe();
+                            .as(transactionalOperator::transactional);
+                });
     }
 
     private BookedRideProposalEntity mapToBookedRideProposalEntity(RideProposalBookedEvent event) {
