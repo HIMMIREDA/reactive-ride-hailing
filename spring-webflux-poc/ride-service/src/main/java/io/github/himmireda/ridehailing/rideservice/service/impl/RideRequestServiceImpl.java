@@ -11,6 +11,7 @@ import io.github.himmireda.ridehailing.rideservice.dto.response.RideProposalResp
 import io.github.himmireda.ridehailing.rideservice.entity.RideRequestEntity;
 import io.github.himmireda.ridehailing.rideservice.enums.RideRequestStatus;
 import io.github.himmireda.ridehailing.rideservice.exception.RideRequestNotFoundException;
+import io.github.himmireda.ridehailing.rideservice.exception.RideRequestStatusConflictException;
 import io.github.himmireda.ridehailing.rideservice.kafka.RideProposalSinkManager;
 import io.github.himmireda.ridehailing.rideservice.mapper.RideRequestMapper;
 import io.github.himmireda.ridehailing.rideservice.repository.RideRequestRepository;
@@ -91,7 +92,8 @@ public class RideRequestServiceImpl implements RideRequestService {
                         sink.next(rideRequestEntity);
                         return;
                     }
-                    sink.error(new RideRequestNotFoundException(String.format("Ride Request with id %s is not in REQUESTED status", rideRequestId)));
+                    sink.error(new RideRequestStatusConflictException(String.format(
+                            "Ride Request with id %s is not in REQUESTED status (current status: %s)", rideRequestId, rideRequestEntity.getStatus())));
                 })
                 .flatMap(rideRequestRepository::save)
                 .flatMap(rideRequestEntity -> {
