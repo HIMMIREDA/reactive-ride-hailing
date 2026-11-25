@@ -3,83 +3,174 @@
 		"_postman_id": "a9e8ecdb-6248-4a2c-9749-a2cf8034e127",
 		"name": "poc-spring-webflux",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "29944646"
+		"description": "Run the requests top to bottom. The login requests store the JWTs in the collection variables {{jwt}} (rider) and {{driverJwt}} (driver); create/propose store {{rideRequestId}} and {{rideProposalId}}."
 	},
 	"item": [
 		{
-			"name": "[USER+DRIVER] register",
+			"name": "[USER] register",
 			"request": {
 				"method": "POST",
 				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/users",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"users"
+					]
+				},
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"email\": \"redrive1@gmail.com\",\n    \"password\": \"redriver123\",\n    \"firstName\": \"redriver1\",\n    \"lastName\": \"himmi\",\n    \"role\": \"DRIVER\",\n    \"phoneNumber\": \"0612218950\"\n}",
+					"raw": "{\n    \"email\": \"rider-{{runId}}@example.com\",\n    \"password\": \"rider-password\",\n    \"firstName\": \"Ada\",\n    \"lastName\": \"Lovelace\",\n    \"role\": \"USER\",\n    \"phoneNumber\": \"0600000000\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
 						}
 					}
-				},
+				}
+			},
+			"response": [],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"// New example accounts on every run of the collection (emails must be unique).",
+							"if (!pm.collectionVariables.get('runId')) { pm.collectionVariables.set('runId', Date.now().toString()); }"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "[DRIVER] register",
+			"request": {
+				"method": "POST",
+				"header": [],
 				"url": {
-					"raw": "http://localhost:8085/api/users",
-					"protocol": "http",
+					"raw": "{{baseUrl}}/api/users",
 					"host": [
-						"localhost"
+						"{{baseUrl}}"
 					],
-					"port": "8085",
 					"path": [
 						"api",
 						"users"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"driver-{{runId}}@example.com\",\n    \"password\": \"driver-password\",\n    \"firstName\": \"Grace\",\n    \"lastName\": \"Hopper\",\n    \"role\": \"DRIVER\",\n    \"phoneNumber\": \"0600000000\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
 			"response": []
 		},
 		{
-			"name": "[USER+DRIVER] auth",
+			"name": "[USER] login (sets {{jwt}})",
 			"request": {
 				"method": "POST",
 				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"email\": \"redrive1@gmail.com\",\n    \"password\": \"redriver123\",\n    \"role\": \"DRIVER\"\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
 				"url": {
-					"raw": "http://localhost:8085/api/users/auth",
-					"protocol": "http",
+					"raw": "{{baseUrl}}/api/users/auth",
 					"host": [
-						"localhost"
+						"{{baseUrl}}"
 					],
-					"port": "8085",
 					"path": [
 						"api",
 						"users",
 						"auth"
 					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"rider-{{runId}}@example.com\",\n    \"password\": \"rider-password\",\n    \"role\": \"USER\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
 				}
 			},
-			"response": []
+			"response": [],
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('rider logged in', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+							"const value = pm.response.json().token;",
+							"pm.collectionVariables.set('jwt', value);",
+							"console.log('jwt set');"
+						]
+					}
+				}
+			]
 		},
 		{
-			"name": "[USER] create a ride request",
+			"name": "[DRIVER] login (sets {{driverJwt}})",
 			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI4YzFkMzNiNS1iODVmLTRjNmQtYjczYS0yYjYxOTkyYzNhNTIiLCJyb2xlIjoiVVNFUiIsImVtYWlsIjoicmVkYUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRhIiwibGFzdE5hbWUiOiJoaW1taSIsInBob25lTnVtYmVyIjoiMDYxMjIxODk1MCIsImlhdCI6MTc0ODY0MTgxNywiZXhwIjoxNzQ4NzI4MjE3fQ.rDVKmaY9LpunkOtmnzd4fCmeHpRum-qdK4sV9HoHtObVOve_N21BYF7xPj4TXNrfDIT3KQ-WsTC_v339oko5Bw",
-							"type": "string"
-						}
-					]
-				},
 				"method": "POST",
 				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/users/auth",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"users",
+						"auth"
+					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"driver-{{runId}}@example.com\",\n    \"password\": \"driver-password\",\n    \"role\": \"DRIVER\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				}
+			},
+			"response": [],
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('driver logged in', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+							"const value = pm.response.json().token;",
+							"pm.collectionVariables.set('driverJwt', value);",
+							"console.log('driverJwt set');"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "[USER] create a ride request (sets {{rideRequestId}})",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rides",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"rides"
+					]
+				},
 				"body": {
 					"mode": "raw",
 					"raw": "{\n    \"startLng\": 20.2,\n    \"startLat\": 33.2,\n    \"endLng\": 20.1,\n    \"endLat\": 50.1,\n    \"seats\": 2,\n    \"preferredPrice\": 12.22\n}",
@@ -89,117 +180,74 @@
 						}
 					}
 				},
-				"url": {
-					"raw": "http://localhost:8085/api/rides",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "8085",
-					"path": [
-						"api",
-						"rides"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "[USER] accept ride proposal",
-			"request": {
 				"auth": {
 					"type": "bearer",
 					"bearer": [
 						{
 							"key": "token",
-							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI4YzFkMzNiNS1iODVmLTRjNmQtYjczYS0yYjYxOTkyYzNhNTIiLCJyb2xlIjoiVVNFUiIsImVtYWlsIjoicmVkYUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRhIiwibGFzdE5hbWUiOiJoaW1taSIsInBob25lTnVtYmVyIjoiMDYxMjIxODk1MCIsImlhdCI6MTc0ODY0MTgxNywiZXhwIjoxNzQ4NzI4MjE3fQ.rDVKmaY9LpunkOtmnzd4fCmeHpRum-qdK4sV9HoHtObVOve_N21BYF7xPj4TXNrfDIT3KQ-WsTC_v339oko5Bw",
+							"value": "{{jwt}}",
 							"type": "string"
 						}
 					]
-				},
-				"method": "PUT",
-				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"rideProposalId\": \"48ff06e1-f937-4f2f-ae04-a6ec1b524d7e\"\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
+				}
+			},
+			"response": [],
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('ride created', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+							"const value = pm.response.json().rideRequestId;",
+							"pm.collectionVariables.set('rideRequestId', value);",
+							"console.log('rideRequestId set');"
+						]
 					}
-				},
-				"url": {
-					"raw": "http://localhost:8085/api/rides/9748f423-a8ce-4c32-91c9-eaccd2f809ca/accept",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "8085",
-					"path": [
-						"api",
-						"rides",
-						"9748f423-a8ce-4c32-91c9-eaccd2f809ca",
-						"accept"
-					]
 				}
-			},
-			"response": []
+			]
 		},
 		{
-			"name": "[USER] get ride proposals",
+			"name": "[USER] get ride proposals (SSE)",
 			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI4YzFkMzNiNS1iODVmLTRjNmQtYjczYS0yYjYxOTkyYzNhNTIiLCJyb2xlIjoiVVNFUiIsImVtYWlsIjoicmVkYUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRhIiwibGFzdE5hbWUiOiJoaW1taSIsInBob25lTnVtYmVyIjoiMDYxMjIxODk1MCIsImlhdCI6MTc0ODY0MTgxNywiZXhwIjoxNzQ4NzI4MjE3fQ.rDVKmaY9LpunkOtmnzd4fCmeHpRum-qdK4sV9HoHtObVOve_N21BYF7xPj4TXNrfDIT3KQ-WsTC_v339oko5Bw",
-							"type": "string"
-						}
-					]
-				},
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8085/api/rides/9748f423-a8ce-4c32-91c9-eaccd2f809ca/proposals/stream",
-					"protocol": "http",
+					"raw": "{{baseUrl}}/api/rides/{{rideRequestId}}/proposals/stream",
 					"host": [
-						"localhost"
+						"{{baseUrl}}"
 					],
-					"port": "8085",
 					"path": [
 						"api",
 						"rides",
-						"9748f423-a8ce-4c32-91c9-eaccd2f809ca",
+						"{{rideRequestId}}",
 						"proposals",
 						"stream"
 					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "[DRIVER] get nearby ride requests",
-			"request": {
+				},
 				"auth": {
 					"type": "bearer",
 					"bearer": [
 						{
 							"key": "token",
-							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyODIwMjc5OC0wNjhkLTQ4ZGMtOWZlMS1lNTg5NGYyNmI1NGMiLCJyb2xlIjoiRFJJVkVSIiwiZW1haWwiOiJyZWRyaXZlMUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRyaXZlcjEiLCJsYXN0TmFtZSI6ImhpbW1pIiwicGhvbmVOdW1iZXIiOiIwNjEyMjE4OTUwIiwiaWF0IjoxNzQ4NjQyNjQ4LCJleHAiOjE3NDg3MjkwNDh9.qODmtstKzNvwXeFE5T0AanuCqM0IdEUuOMtFfoRp7u9ymHjrxf5NsxRh5BWk4Q9pwmqc0kWr3IqSbokz1KxxTw",
+							"value": "{{jwt}}",
 							"type": "string"
 						}
 					]
-				},
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "[DRIVER] get nearby ride requests (SSE)",
+			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8085/api/rides/nearby/stream?lat=33.3&lng=20.2&radius=100",
-					"protocol": "http",
+					"raw": "{{baseUrl}}/api/rides/nearby/stream?lat=33.3&lng=20.2&radius=100",
 					"host": [
-						"localhost"
+						"{{baseUrl}}"
 					],
-					"port": "8085",
 					"path": [
 						"api",
 						"rides",
@@ -220,49 +268,142 @@
 							"value": "100"
 						}
 					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "[DRIVER] propose a ride proposal",
-			"request": {
+				},
 				"auth": {
 					"type": "bearer",
 					"bearer": [
 						{
 							"key": "token",
-							"value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyODIwMjc5OC0wNjhkLTQ4ZGMtOWZlMS1lNTg5NGYyNmI1NGMiLCJyb2xlIjoiRFJJVkVSIiwiZW1haWwiOiJyZWRyaXZlMUBnbWFpbC5jb20iLCJmaXJzdE5hbWUiOiJyZWRyaXZlcjEiLCJsYXN0TmFtZSI6ImhpbW1pIiwicGhvbmVOdW1iZXIiOiIwNjEyMjE4OTUwIiwiaWF0IjoxNzQ4NjQzOTQ2LCJleHAiOjE3NDg3MzAzNDZ9.qCGIJuHJSctVevQXg0Z6Peikqn2rgtn10QRh3U37gjuvAbehqsUxMAe_IRAXSo6vzd3FpHyCd1w-4cVFfj2xjw",
+							"value": "{{driverJwt}}",
 							"type": "string"
 						}
 					]
-				},
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "[DRIVER] propose a ride proposal (sets {{rideProposalId}})",
+			"request": {
 				"method": "POST",
 				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rides/proposals",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"rides",
+						"proposals"
+					]
+				},
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"rideRequestId\": \"9748f423-a8ce-4c32-91c9-eaccd2f809ca\",\n    \"price\": 300.4\n}",
+					"raw": "{\n    \"rideRequestId\": \"{{rideRequestId}}\",\n    \"price\": 15.5\n}",
 					"options": {
 						"raw": {
 							"language": "json"
 						}
 					}
 				},
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{driverJwt}}",
+							"type": "string"
+						}
+					]
+				}
+			},
+			"response": [],
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"pm.test('offer sent', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+							"const value = pm.response.json().rideProposalId;",
+							"pm.collectionVariables.set('rideProposalId', value);",
+							"console.log('rideProposalId set');"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "[USER] accept ride proposal",
+			"request": {
+				"method": "PUT",
+				"header": [],
 				"url": {
-					"raw": "http://localhost:8085/api/rides/proposals",
-					"protocol": "http",
+					"raw": "{{baseUrl}}/api/rides/{{rideRequestId}}/accept",
 					"host": [
-						"localhost"
+						"{{baseUrl}}"
 					],
-					"port": "8085",
 					"path": [
 						"api",
 						"rides",
-						"proposals"
+						"{{rideRequestId}}",
+						"accept"
+					]
+				},
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"rideProposalId\": \"{{rideProposalId}}\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
 					]
 				}
 			},
 			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8085",
+			"type": "string"
+		},
+		{
+			"key": "runId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "jwt",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "driverJwt",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "rideRequestId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "rideProposalId",
+			"value": "",
+			"type": "string"
 		}
 	]
 }

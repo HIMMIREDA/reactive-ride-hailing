@@ -84,7 +84,8 @@ Compose builds the four service images, starts PostgreSQL, MongoDB (replica set)
 Once everything is healthy, run the end-to-end smoke test from the repository root (needs `curl` and `jq`). It signs up a rider and a driver, creates a ride, sends and accepts an offer, and checks that the ride ends `BOOKED`:
 
 ```bash
-scripts/smoke-test.sh
+scripts/smoke-test.sh            # from the repository root
+../scripts/smoke-test.sh         # or from spring-webflux-poc/
 ```
 
 Published ports: API gateway http://localhost:8085 and AKHQ http://localhost:9000. Nothing else is reachable from the host (see [Design choices](#design-choices)). To reach a database, Kafka, Schema Registry or a service directly while debugging, copy `spring-webflux-poc/docker-compose.override.example.yml` to `docker-compose.override.yml` (gitignored); the file explains what it opens.
@@ -97,7 +98,7 @@ Published ports: API gateway http://localhost:8085 and AKHQ http://localhost:900
 
 The gateway container still routes to the `ride-service` container name. To send traffic through a gateway to your IDE instance, run `api-gateway` from the IDE as well (its defaults point at `localhost:8082`-`8084`).
 
-A Postman collection is included: `spring-webflux-poc/poc-spring-webflux.postman_collection.json`.
+A Postman collection is included: `spring-webflux-poc/poc-spring-webflux.postman_collection.json`. Run it top to bottom: the login requests store the JWTs in the collection variables `{{jwt}}` (rider) and `{{driverJwt}}` (driver), and the create/propose requests store the ids the next requests need. No token is stored in the file.
 
 ## API
 

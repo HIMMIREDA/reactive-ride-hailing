@@ -3,8 +3,9 @@
 # sign up a rider and a driver, log in, create a ride, the driver sends an offer, the rider accepts,
 # and the ride must end BOOKED. Exits non-zero on the first failure.
 #
-#   docker compose -f spring-webflux-poc/docker-compose.yaml up -d --build --wait
-#   scripts/smoke-test.sh
+#   scripts/smoke-test.sh            # from the repository root
+#   ../scripts/smoke-test.sh         # from spring-webflux-poc/
+# Paths are resolved from the script's own location, so the working directory does not matter.
 #
 # Requires curl, jq and docker. GATEWAY_URL defaults to http://localhost:8085.
 # The final BOOKED check reads PostgreSQL through `docker compose exec`: the API has no endpoint that
@@ -12,13 +13,18 @@
 set -euo pipefail
 
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:8085}"
-COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "$0")/.." && pwd)/spring-webflux-poc/docker-compose.yaml}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/spring-webflux-poc/docker-compose.yaml}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-60}"
 RUN_ID="$(date +%s)-$RANDOM"
 
 for tool in curl jq docker; do
   command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 2; }
 done
+[ -f "$COMPOSE_FILE" ] || { echo "compose file not found: $COMPOSE_FILE" >&2; exit 2; }
+
+BODY_FILE="$(mktemp)"
+trap 'rm -f "$BODY_FILE"' EXIT
 
 step() { printf '\n==> %s\n' "$*"; }
 ok()   { printf '    ok: %s\n' "$*"; }
@@ -27,12 +33,12 @@ fail() { printf '    FAILED: %s\n' "$*" >&2; [ -n "${BODY:-}" ] && printf '    l
 # call METHOD PATH [TOKEN] [JSON_BODY] -> sets STATUS and BODY
 call() {
   local method=$1 path=$2 token=${3:-} data=${4:-}
-  local args=(-sS -o /tmp/smoke-body.$$ -w '%{http_code}' -X "$method" "$GATEWAY_URL$path" -H 'Content-Type: application/json')
+  local args=(-sS -o "$BODY_FILE" -w '%{http_code}' -X "$method" "$GATEWAY_URL$path" -H 'Content-Type: application/json')
   [ -n "$token" ] && args+=(-H "Authorization: Bearer $token")
   [ -n "$data" ] && args+=(--data "$data")
   STATUS=$(curl "${args[@]}") || STATUS=000
-  BODY=$(cat /tmp/smoke-body.$$ 2>/dev/null || true)
-  rm -f /tmp/smoke-body.$$
+  BODY=$(cat "$BODY_FILE" 2>/dev/null || true)
+  : > "$BODY_FILE"
 }
 
 expect_status() { [ "$STATUS" = "$1" ] || fail "$2: expected HTTP $1, got $STATUS"; }
