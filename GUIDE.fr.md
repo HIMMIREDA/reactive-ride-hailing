@@ -688,33 +688,12 @@ public class KafkaProducerConfig {
 
 ## 8.1 Pré-requis
 
-1.  Java 21 & Maven
-2.  Docker & Docker Compose
+1.  Docker avec Compose v2 et Buildx
+2.  Java 21 & Maven (uniquement pour les tests ou pour lancer un service hors de Docker)
 
-## 8.2 Lancement du POC
+## 8.2 Lancer le POC
 
-```bash
-mvn clean install -U # compile et installe tous les modules du projet en mettant à jour les dépendances
-
-cd spring-webflux-poc
-cp .env.example .env # puis choisissez votre utilisateur/mot de passe PostgreSQL et JWT_SECRET
-docker compose up -d # démarre les services Docker (Kafka, PostgreSQL, MongoDB, Schema Registry, akhq etc.)
-
-cd common
-mvn schema-registry:register # enregistre les schémas dans le Schema Registry. Si la commande échoue, réessayez après quelques instants.
-
-cd ../auth-service
-mvn spring-boot:run
-
-cd ../ride-service
-mvn spring-boot:run
-
-cd ../driver-service
-mvn spring-boot:run
-
-cd ../api-gateway
-mvn spring-boot:run
-```
+Voir [Lancer le projet en local](README.fr.md#lancer-le-projet-en-local) dans le README : copier `.env`, renseigner `JWT_SECRET`, lancer `docker compose up --build`, puis `scripts/smoke-test.sh`. Le README explique aussi comment lancer un seul service depuis l'IDE.
 
 ## 8.3 Technologies utilisées
 
