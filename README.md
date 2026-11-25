@@ -1,5 +1,7 @@
 # Reactive Ride-Hailing
 
+[![CI](https://github.com/HIMMIREDA/reactive-ride-hailing/actions/workflows/ci.yml/badge.svg)](https://github.com/HIMMIREDA/reactive-ride-hailing/actions/workflows/ci.yml)
+
 *English · [Français](README.fr.md)*
 
 A ride-hailing backend built reactive end to end with Spring WebFlux, Kafka, R2DBC and MongoDB. A rider posts a ride request, nearby drivers see it in real time and send price offers, and the rider sees the offers live and accepts one.
@@ -73,6 +75,7 @@ Prerequisites: Java 21, Maven, Docker with Docker Compose.
 mvn clean install -U
 
 cd spring-webflux-poc
+cp .env.example .env           # then set your own PostgreSQL user/password
 docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
 
 cd common
@@ -125,4 +128,4 @@ More curl examples are in [GUIDE.md, section 8.5](GUIDE.md#85-api-endpoints).
 - [ ] **Add error recovery to the driver-service consumer.** It ends with a bare `subscribe()` and `KafkaFluxRegistry` only logs errors, so one exception stops consumption until restart. Plan: per-record `onErrorResume` or `retryWhen`, plus a dead-letter topic.
 - [ ] **Share one change stream across drivers.** Each SSE connection opens its own MongoDB change stream. Plan: one shared stream fanned out to subscribers with `Sinks.many().multicast()`.
 - [ ] **Migrate off Reactor Kafka.** The project was discontinued in May 2025 and Spring Kafka's reactive templates are deprecated ([announcement](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Plan: plain Spring Kafka (`KafkaTemplate`, `@KafkaListener`) bridged to `Mono`/`Flux`.
-- [ ] **Add automated tests.** Integration tests with Testcontainers (Kafka, PostgreSQL, MongoDB) and `StepVerifier` for the reactive pipelines.
+- [x] **Add automated tests.** Integration tests with Testcontainers (Kafka, PostgreSQL, MongoDB) and `StepVerifier` for the reactive pipelines.

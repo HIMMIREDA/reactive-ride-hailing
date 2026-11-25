@@ -1,5 +1,7 @@
 # Reactive Ride-Hailing
 
+[![CI](https://github.com/HIMMIREDA/reactive-ride-hailing/actions/workflows/ci.yml/badge.svg)](https://github.com/HIMMIREDA/reactive-ride-hailing/actions/workflows/ci.yml)
+
 *[English](README.md) · Français*
 
 Un backend de VTC entièrement réactif, construit avec Spring WebFlux, Kafka, R2DBC et MongoDB. Un passager publie une demande de course, les conducteurs à proximité la voient en temps réel et proposent un prix, puis le passager voit les propositions en direct et en accepte une.
@@ -73,6 +75,7 @@ Pré-requis : Java 21, Maven, Docker avec Docker Compose.
 mvn clean install -U
 
 cd spring-webflux-poc
+cp .env.example .env           # puis choisissez votre utilisateur/mot de passe PostgreSQL
 docker compose up -d           # PostgreSQL, MongoDB (replica set), Kafka, Schema Registry, AKHQ
 
 cd common
@@ -125,4 +128,4 @@ D'autres exemples curl sont dans [GUIDE.fr.md, section 8.5](GUIDE.fr.md#85-docum
 - [ ] **Ajouter une reprise sur erreur au consumer de driver-service.** Il se termine par un `subscribe()` sans gestion d'erreur et `KafkaFluxRegistry` se contente de logger : une seule exception arrête la consommation jusqu'au redémarrage. Prévu : `onErrorResume` ou `retryWhen` par message, plus un dead-letter topic.
 - [ ] **Partager un seul change stream entre les conducteurs.** Chaque connexion SSE ouvre son propre change stream MongoDB. Prévu : un flux unique diffusé aux abonnés avec `Sinks.many().multicast()`.
 - [ ] **Migrer hors de Reactor Kafka.** Le projet est arrêté depuis mai 2025 et les templates réactifs de Spring Kafka sont dépréciés ([annonce](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)). Prévu : Spring Kafka classique (`KafkaTemplate`, `@KafkaListener`) relié à `Mono`/`Flux`.
-- [ ] **Ajouter des tests automatisés.** Tests d'intégration avec Testcontainers (Kafka, PostgreSQL, MongoDB) et `StepVerifier` pour les pipelines réactifs.
+- [x] **Ajouter des tests automatisés.** Tests d'intégration avec Testcontainers (Kafka, PostgreSQL, MongoDB) et `StepVerifier` pour les pipelines réactifs.

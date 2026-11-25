@@ -1,10 +1,12 @@
 server:
   port: 8082
 spring:
+  config:
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   r2dbc:
     url: r2dbc:postgresql://localhost:15432/users
-    username: artois
-    password: artois123
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
   flyway:
     url: jdbc:postgresql://localhost:15432/users
     locations: classpath:db/migration
