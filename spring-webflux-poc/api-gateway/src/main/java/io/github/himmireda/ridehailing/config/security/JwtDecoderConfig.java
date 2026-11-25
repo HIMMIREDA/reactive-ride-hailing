@@ -18,7 +18,7 @@ public class JwtDecoderConfig {
 
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
-        SecretKey secretKey = new SecretKeySpec(secret.getBytes(), "HmacSHA512");
+        SecretKey secretKey = new SecretKeySpec(JwtSecretValidator.requireValidSecret(secret), "HmacSHA512");
 
         return NimbusReactiveJwtDecoder.withSecretKey(secretKey)
                 .macAlgorithm(MacAlgorithm.HS512)

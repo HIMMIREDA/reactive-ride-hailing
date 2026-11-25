@@ -45,8 +45,12 @@ class AuthServiceIT {
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17-alpine");
 
+    /** Tests bring their own secret: no JWT_SECRET is needed on the machine or in CI. */
+    static final String TEST_JWT_SECRET = "test-only-secret-for-auth-service-integration-tests-0123456789abcdef";
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
+        registry.add("JWT_SECRET", () -> TEST_JWT_SECRET);
         registry.add("spring.flyway.url", postgres::getJdbcUrl);
         registry.add("spring.r2dbc.username", postgres::getUsername);
         registry.add("spring.r2dbc.password", postgres::getPassword);
