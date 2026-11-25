@@ -1,0 +1,10 @@
+# Keep the build context small and free of secrets.
+.git
+.github
+**/target
+**/.env
+**/.idea
+**/*.iml
+images
+*.md
+spring-webflux-poc/*.postman_collection.json

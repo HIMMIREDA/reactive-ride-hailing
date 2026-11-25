@@ -1,0 +1,10 @@
+# Active inside docker compose (SPRING_PROFILES_ACTIVE=docker): container hostnames instead of localhost.
+spring:
+  kafka:
+    bootstrap-servers: broker:29092
+    properties:
+      schema.registry.url: http://schema-registry:8081
+  r2dbc:
+    url: r2dbc:postgresql://db:5432/rides
+  flyway:
+    url: jdbc:postgresql://db:5432/rides

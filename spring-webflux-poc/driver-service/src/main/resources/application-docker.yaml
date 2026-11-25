@@ -1,0 +1,11 @@
+# Active inside docker compose (SPRING_PROFILES_ACTIVE=docker): container hostnames instead of localhost.
+spring:
+  kafka:
+    bootstrap-servers: broker:29092
+    properties:
+      schema.registry.url: http://schema-registry:8081
+  data:
+    mongodb:
+      # Inside the compose network the replica set member "mongodb:27017" resolves, so the driver
+      # can use replica set discovery.
+      uri: mongodb://mongodb:27017/drives?replicaSet=rs0

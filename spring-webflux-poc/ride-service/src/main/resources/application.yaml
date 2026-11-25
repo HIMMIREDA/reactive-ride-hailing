@@ -26,3 +26,10 @@ kafka:
     ride-proposal-accepted: "poc-ride-proposal-accepted-v1"
     ride-proposal-booked: "poc-ride-proposal-booked-v1"
     ride-proposal-proposed: "poc-ride-proposal-proposed-v1"
+
+# Only the health endpoint is exposed (used by the docker compose healthchecks).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

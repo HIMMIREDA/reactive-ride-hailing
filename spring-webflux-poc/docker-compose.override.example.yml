@@ -1,0 +1,38 @@
+# Debug access to the internal containers from your machine.
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml   # gitignored
+#   docker compose up -d                                                  # merged automatically
+#
+# This deliberately bypasses the gateway trust boundary: with 8082-8084 published, anyone on this
+# machine can call a service with forged X-User-Id headers. Local debugging only.
+#
+# The host ports match the defaults in each service's application.yaml, so a service started from
+# your IDE (mvn spring-boot:run, no "docker" profile) can use these containers:
+#   docker compose stop ride-service   # then run ride-service from the IDE
+#
+# MongoDB: the replica set member is "mongodb:27017", which does not resolve on the host. Connect with
+#   mongosh "mongodb://localhost:27017/drives?directConnection=true"
+# (driver-service's default local URI already does this).
+
+services:
+  db:
+    ports:
+      - "15432:5432"
+  mongodb:
+    ports:
+      - "27017:27017"
+  broker:
+    ports:
+      - "9092:9092"     # advertised to the host as localhost:9092
+  schema-registry:
+    ports:
+      - "8081:8081"
+  auth-service:
+    ports:
+      - "8082:8082"
+  ride-service:
+    ports:
+      - "8083:8083"
+  driver-service:
+    ports:
+      - "8084:8084"

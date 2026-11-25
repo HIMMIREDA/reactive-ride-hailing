@@ -31,3 +31,9 @@ spring:
               predicates:
                 - Path=/api/rides/**
 
+# Only the health endpoint is exposed (used by the docker compose healthchecks).
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
