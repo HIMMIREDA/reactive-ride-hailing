@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "RideProposalProposedEvent",
-  "namespace": "fr.univ.artois.reda.avro",
+  "namespace": "io.github.himmireda.ridehailing.avro",
   "fields": [
     {
       "name": "rideProposalId",

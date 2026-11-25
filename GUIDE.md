@@ -697,6 +697,7 @@ public class KafkaProducerConfig {
 mvn clean install -U # builds and installs every module, updating dependencies
 
 cd spring-webflux-poc
+cp .env.example .env # then set your own PostgreSQL user/password
 docker compose up -d # starts the Docker services (Kafka, PostgreSQL, MongoDB, Schema Registry, AKHQ, etc.)
 
 cd common
